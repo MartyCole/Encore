@@ -22,13 +22,13 @@ addpath('../tangent_basis')
 ICO_RESOLUTION = 3;
 
 % delta for computing numerical derivatives
-delta = 1e-10;
+delta = 1e-5;
 
 % highest order of spherical harmonics for tangent basis
 l = 30; 
 
 % maximum number of iterations for registration
-REG_ITERS = 400;
+REG_ITERS = 40000;
 
 %% Setup
 
@@ -54,9 +54,9 @@ test_fun = @(theta,phi) (sin(theta) .* cos(phi / 2)) * ...
 grid_data = test_fun(grid.theta, grid.phi);
 
 % generate n points over which to evaluate
-n = 100;
-theta = linspace(0,pi,n)';
-phi = linspace(0,2*pi,n)';
+n = 5;
+theta = linspace(0,0.4,n)';
+phi = linspace(0,0.4,n)';
 
 % convert to cartesian coordinates
 test_points = sphere_to_cart(theta,phi).';
@@ -64,6 +64,19 @@ test_points = sphere_to_cart(theta,phi).';
 % setup and run the barycentric interpolation class object
 interpolator = SphericalInterpolator(grid, test_points);
 test_values = interpolator.evaluate_2d(grid_data);
+
+% 25    556   553   552   552
+% 321   555   555   148   558
+% 333    25   556   553   148
+
+figure(10)
+hold on
+scatter3(grid.V(:,1),grid.V(:,2),grid.V(:,3),'green')
+scatter3(grid.V(grid.T(966,:),1),grid.V(grid.T(966,:),2),grid.V(grid.T(966,:),3),'red')
+scatter3(test_points(2,1),test_points(2,2),test_points(2,3),'blue')
+hold off
+
+grid_data(grid.T(966,:),grid.T(966,:))
 
 % compare interpolated values to the truth
 truth = test_fun(theta, phi);
@@ -97,34 +110,28 @@ sgtitle('Interpolation Test')
 %% Derivative Test
 
 % generate a test function over the grid
-test_fun = @(theta,phi) (sin(theta) .* cos(phi / 2)) * ...
-                                (sin(theta) .* cos(phi / 2)).';
+test_fun = @(theta,phi) (sin(theta) .* cos(phi)) * ...
+                                (sin(theta) .* cos(phi)).';
 
 grid_data = test_fun(grid.theta, grid.phi);
-
-% generate n points over which to evaluate
-n = 100;
-theta = linspace(0,pi,n)';
-phi = linspace(0,2*pi,n)';
-
-% convert to cartesian coordinates
-test_points = sphere_to_cart(theta,phi).';
 
 % setup and run the barycentric interpolation class object
 sph_derivative = SphericalDerivative(grid, delta, 'polar');
 [dxt, dxp, dyt, dyp] = sph_derivative.get_derivative(grid_data);
 
-test_dxt = @(theta,phi) (cos(theta) .* cos(phi / 2)) * ...
-                                (sin(theta) .* cos(phi / 2)).';
-test_dxp = @(theta,phi) (sin(theta) .* -(1/2) .* sin(phi / 2)) * ...
-                                (sin(theta) .* cos(phi / 2)).';
-test_dyt = @(theta,phi) (cos(theta) .* cos(phi / 2)) * ...
-                                (cos(theta) .* cos(phi / 2)).';
-test_dyp = @(theta,phi) (cos(theta) .* cos(phi / 2)) * ...
-                                (sin(theta) .* -(1/2) .* sin(phi / 2)).';
+test_dxt = @(theta,phi) (cos(theta) .* cos(phi)) * ...
+                                (sin(theta) .* cos(phi)).';
+test_dxp = @(theta,phi) (sin(theta) .* -sin(phi)) * ...
+                                (sin(theta) .* cos(phi)).';
+test_dyt = @(theta,phi) (sin(theta) .* cos(phi)) * ...
+                                (cos(theta) .* cos(phi)).';
+test_dyp = @(theta,phi) (sin(theta) .* cos(phi)) * ...
+                                (sin(theta) .* -sin(phi)).';
 
-% THIS IS A PROBLEM!
 dxt_mse = mean((dxt' - test_dxt(grid.theta, grid.phi)).^2, 'all');
+dxp_mse = mean((dxp' - test_dxp(grid.theta, grid.phi)).^2, 'all');
+dyt_mse = mean((dyt' - test_dyt(grid.theta, grid.phi)).^2, 'all');
+dyp_mse = mean((dyp' - test_dyp(grid.theta, grid.phi)).^2, 'all');
 
 fprintf('MSE for spatial derivative estimation: %0.4f\n', dxt_mse);
 
@@ -203,7 +210,7 @@ view(0,0);
 %% Calculate Kernel for KDE smoothing
 
 R = 180/pi; % radius of an idealised spherical brain
-FWHM = 10; % bandwidth radius mm
+FWHM = 30; % bandwidth radius mm
 epsilon = 0.1; % truncation distance
 
 % get geodesic distance between each pair of vertices on the grid
@@ -315,8 +322,8 @@ title('Interpolated warped SC')
 % registration variables
 interpolator = SphericalInterpolator(grid);
 sph_derivative = SphericalDerivative(grid, 1e-5, 'tangent');
-grad_delta = 0.0000005;
-dH = inf;
+grad_delta = 0.01;
+dH = 0;
 
 % cached data
 mask = 1-eye(P);
@@ -327,8 +334,8 @@ warp.J = ones(P,1);
 warp.V = grid.V;
 
 % initial functions
-Q2 = sqrt(SC / sum(SC(:) .* A(:)));
-Q1 = sqrt(warped_SC / sum(warped_SC(:) .* A(:)));
+Q1 = sqrt(SC / sum(SC(:) .* A(:)));
+Q2 = sqrt(warped_SC / sum(warped_SC(:) .* A(:)));
 
 % initial cost
 moving_img = Q2;
@@ -352,13 +359,14 @@ for iter = 1:REG_ITERS
     b = sum(FmM .* ((dQ2xe2' + dQ2ye2)), 1);
     c = sum(FmM .* moving_img, 1);
       
-    tmp_dH = -2 * (a * grid.basis(:,:,1) + b * grid.basis(:,:,2) + c * grid.laplacian);
+    idx = 1:size(grid.basis,2);%randperm(size(grid.basis,2), 600);
+    tmp_dH = -2 * (a * grid.basis(:,idx,1) + b * grid.basis(:,idx,2) + c * grid.laplacian(:,idx));
  
 % **** THE FULL COST FUNCTION WITHOUT VECTORISATION ****
-%     tmp_dH = zeros(size(grid.basis,2),1);
+%     test = zeros(size(grid.basis,2),1);
 %     for i = 1:P
 %         for j = 1:P
-%             tmp_dH = tmp_dH - (2 * (Q1(i,j) - Q2(i,j)) * ( ... 
+%             test = test - (2 * (Q1(i,j) - Q2(i,j)) * ( ... 
 %                 (dQ2xe1(i,j)*squeeze(grid.basis(i,:,1))' + ...
 %                  dQ2xe2(i,j)*squeeze(grid.basis(i,:,2))' + ...
 %                  dQ2ye1(i,j)*squeeze(grid.basis(j,:,1))' + ...
@@ -368,11 +376,11 @@ for iter = 1:REG_ITERS
 %     end
 % **** END FULL COST FUNCTION WITHOUT VECTORISATION ****
 
-    if norm(tmp_dH,'fro') < norm(dH,'fro')
+    if norm(tmp_dH,'fro') > norm(dH,'fro')
         dH = tmp_dH;
-     
+
         % calculate displacement in each basis direction
-        test_gamma = squeeze(sum(dH.*grid.basis,2));
+        test_gamma = squeeze(sum(-dH.*grid.basis(:,idx,:),2));
         
         % compose the new warp with all previous warps
         warp = sph_derivative.compose_warp(grad_delta .* test_gamma, warp);
@@ -385,11 +393,8 @@ for iter = 1:REG_ITERS
     end    
 
     % evaluate function after warping
-    interpolator.update_query_points(warp.V);
+    interpolator.update_query_points_inv(warp.V);
     moving_img = interpolator.evaluate_2d(Q2) .* (sqrt(warp.J) * sqrt(warp.J).');
-
-    % normalise and remove diagonal from new functions
-    moving_img = moving_img .* mask;
     moving_img = (moving_img + moving_img.') / 2;
     moving_img = moving_img / sqrt(sum(moving_img(:).^2 .* A(:)));
     
@@ -397,7 +402,7 @@ for iter = 1:REG_ITERS
     FmM = Q1 - moving_img; 
     cost = sum(FmM(:).^2 .* A(:));
    
-    if ((last_cost - cost) < 0)       
+    if ((last_cost - cost) < -1e-4)       
        fprintf('Converged (increased cost) %d: %0.6f\n', iter, cost)            
        break
     end
@@ -408,3 +413,10 @@ for iter = 1:REG_ITERS
         fprintf('Iteration %d cost: %0.6f\n', iter, cost)
     end
 end   
+
+%% Display the final warp
+
+figure(6)
+trisurf(grid.T,warp.V(:,1),warp.V(:,2),warp.V(:,3),warp.J)
+axis off
+axis equal

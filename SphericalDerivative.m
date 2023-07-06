@@ -59,7 +59,7 @@ classdef SphericalDerivative
 
             obj.dVx = obj.p_Vx.';
             obj.dTx = int64(obj.p_Tx-1).';
-            obj.dVy = obj.p_Vx.';
+            obj.dVy = obj.p_Vy.';
             obj.dTy = int64(obj.p_Ty-1).';
 
             [obj.Vg,obj.Tg] = obj.interpolator.get_barycentric_data(grid.V);
@@ -76,25 +76,20 @@ classdef SphericalDerivative
 
         % Function to compose to diffeomorphisms
         function new_warp = compose_warp(obj, displacement, warp)
-            % Setup the interpolation variables
-            [Vx,Tx] = obj.interpolator.get_barycentric_data(warp.V);            
-            
-            % Project displacement vector or the tangent plane in R3
+            % Project displacement vector to the tangent plane in R3 then project to sphere 
             tangent_vec = (obj.grid.e1 .* displacement(:,1) + obj.grid.e2 .* displacement(:,2));
+            new_points = normr(sphere_exp_map(obj.grid.V, tangent_vec)); 
 
-            % Parallel transport the displacement tangent vectors
-            % to thecurrent points of the warp, then get a weighted 
-            % mean over the three vertices of the intersecting triangle
-%             tangent_vec = obj.parallel_transport(tangent_vec(Tx,:)', obj.grid.V(Tx,:)', warp.V(repelem(1:obj.P,3),:)', 1)';
-%             tangent_vec = permute(reshape(tangent_vec,3,obj.P,3),[3,2,1]);
-%             area = reshape(repelem(Vx,3,1),3,obj.P,3);
-%            
-%             tangent_vec = sum(area .* tangent_vec, 3)';
-            tangent_vec = obj.parallel_transport(tangent_vec.', obj.grid.V.', warp.V.').';
+            % Compose the new warp to the current overall warp
+            [Vx,Tx] = obj.interpolator.get_barycentric_data(new_points);
+            
+            v1 = warp.V(Tx(:,1),:);
+            v2 = warp.V(Tx(:,2),:);
+            v3 = warp.V(Tx(:,3),:);
 
             % Project the interpolated displacement vector to the sphere
             new_warp = warp;
-            new_warp.V = normr(sphere_exp_map(warp.V, tangent_vec));           
+            new_warp.V = normr(Vx(:,1).*v1 + Vx(:,2).*v2 + Vx(:,3).*v3);         
         end
 
         % Function to compute the Jacobian of a diffeomorphism
@@ -165,6 +160,8 @@ classdef SphericalDerivative
         function [theta, phi] = cart_to_sphere(~, x)
             theta = acos(x(:,3));
             phi = atan2(x(:,2),x(:,1));
+
+            phi(phi < 0) = phi(phi < 0) + 2*pi;  
         end
 
         function new_vec = parallel_transport(~, tan_vec, orig_pt, new_pt)
@@ -197,11 +194,11 @@ classdef SphericalDerivative
             new_vec = repmat(proj_on_newv, 3, 1) .* new_v + repmat(proj_on_neww, 3, 1) .* rotation;
 
             % clean up close points
-            idx = (sqrt(sum((orig_pt - new_pt).^2, 1)) < 1e-4);
+            idx = (vecnorm(orig_pt - new_pt) < 1e-4);
             new_vec(:, idx) = tan_vec(:, idx);
 
             % clean up antipodal points 
-            idx = (sqrt(sum((orig_pt + new_pt).^2, 1)) < 1e-4);
+            idx = (vecnorm(orig_pt + new_pt) < 1e-4);
             new_vec(:, idx) = tan_vec(:, idx);
         end
     end

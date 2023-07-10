@@ -19,7 +19,7 @@ addpath('../tangent_basis')
 %% Global settings
 
 % resolution settings
-ICO_RESOLUTION = 3;
+ICO_RESOLUTION = 4;
 
 % delta for computing numerical derivatives
 delta = 1e-5;
@@ -64,19 +64,6 @@ test_points = sphere_to_cart(theta,phi).';
 % setup and run the barycentric interpolation class object
 interpolator = SphericalInterpolator(grid, test_points);
 test_values = interpolator.evaluate_2d(grid_data);
-
-% 25    556   553   552   552
-% 321   555   555   148   558
-% 333    25   556   553   148
-
-figure(10)
-hold on
-scatter3(grid.V(:,1),grid.V(:,2),grid.V(:,3),'green')
-scatter3(grid.V(grid.T(966,:),1),grid.V(grid.T(966,:),2),grid.V(grid.T(966,:),3),'red')
-scatter3(test_points(2,1),test_points(2,2),test_points(2,3),'blue')
-hold off
-
-grid_data(grid.T(966,:),grid.T(966,:))
 
 % compare interpolated values to the truth
 truth = test_fun(theta, phi);
@@ -322,7 +309,7 @@ title('Interpolated warped SC')
 % registration variables
 interpolator = SphericalInterpolator(grid);
 sph_derivative = SphericalDerivative(grid, 1e-5, 'tangent');
-grad_delta = 0.01;
+grad_delta = 0.001;
 dH = 0;
 
 % cached data
@@ -331,7 +318,16 @@ A = grid.A * grid.A';
 
 % initial warp    
 warp.J = ones(P,1);
+warp.Jmat = zeros(P,4);
+warp.Jmat(:,1) = 1;
+warp.Jmat(:,4) = 1;
 warp.V = grid.V;
+
+foo.J = ones(P,1);
+foo.Jmat = zeros(P,4);
+foo.Jmat(:,1) = 1;
+foo.Jmat(:,4) = 1;
+foo.V = grid.V;
 
 % initial functions
 Q1 = sqrt(SC / sum(SC(:) .* A(:)));
@@ -376,15 +372,15 @@ for iter = 1:REG_ITERS
 %     end
 % **** END FULL COST FUNCTION WITHOUT VECTORISATION ****
 
-    if norm(tmp_dH,'fro') > norm(dH,'fro')
+    if true%norm(tmp_dH,'fro') > norm(dH,'fro')
         dH = tmp_dH;
 
         % calculate displacement in each basis direction
         test_gamma = squeeze(sum(-dH.*grid.basis(:,idx,:),2));
         
         % compose the new warp with all previous warps
-        warp = sph_derivative.compose_warp(grad_delta .* test_gamma, warp);
-        warp.J = sph_derivative.get_jacobian(warp, true);  
+        [warp,foo] = sph_derivative.compose_warp(grad_delta .* test_gamma, foo);
+        foo.J = sph_derivative.get_jacobian(foo, true);  
 
         warped = true;
     else
@@ -393,8 +389,8 @@ for iter = 1:REG_ITERS
     end    
 
     % evaluate function after warping
-    interpolator.update_query_points_inv(warp.V);
-    moving_img = interpolator.evaluate_2d(Q2) .* (sqrt(warp.J) * sqrt(warp.J).');
+    interpolator.update_query_points(foo.V);
+    moving_img = interpolator.evaluate_2d(Q2) .* (sqrt(foo.J) * sqrt(foo.J).');
     moving_img = (moving_img + moving_img.') / 2;
     moving_img = moving_img / sqrt(sum(moving_img(:).^2 .* A(:)));
     
@@ -402,7 +398,7 @@ for iter = 1:REG_ITERS
     FmM = Q1 - moving_img; 
     cost = sum(FmM(:).^2 .* A(:));
    
-    if ((last_cost - cost) < -1e-4)       
+    if ((last_cost - cost) < -1e-2)       
        fprintf('Converged (increased cost) %d: %0.6f\n', iter, cost)            
        break
     end
@@ -410,13 +406,22 @@ for iter = 1:REG_ITERS
     last_cost = cost; 
 
     if (mod(iter,10) == 0)
-        fprintf('Iteration %d cost: %0.6f\n', iter, cost)
+        pause(0.5);
+        fprintf('Iteration %d cost: %0.6f, %0.4f\n', iter, cost, sum(moving_img(:).^2 .* A(:)))
+        figure(6)
+        foo.J = abs((foo.Jmat(:,1).*foo.Jmat(:,4)) - (foo.Jmat(:,2).*foo.Jmat(:,3)));
+        trisurf(grid.T,foo.V(:,1),foo.V(:,2),foo.V(:,3),foo.J)
+        axis off   
+        axis equal
+        caxis([0,2]);
+        pause(0.5);
     end
 end   
 
 %% Display the final warp
 
 figure(6)
-trisurf(grid.T,warp.V(:,1),warp.V(:,2),warp.V(:,3),warp.J)
+foo.J = abs((foo.Jmat(:,1).*foo.Jmat(:,4)) - (foo.Jmat(:,2).*foo.Jmat(:,3)));
+trisurf(grid.T,foo.V(:,1),foo.V(:,2),foo.V(:,3),foo.J)
 axis off
 axis equal

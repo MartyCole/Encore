@@ -36,7 +36,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     igl::slice(V,Fq.col(2),xyz,Vc);
     
     // find the barycentric coordinates, L, for each query point Vq
-    igl::barycentric_coordinates(Vq,Va,Vb,Vc,L);
+    igl::barycentric_coordinates(C,Va,Vb,Vc,L);
 
     // return the barycentric coordinates and intersecting triangles
     igl::matlab::prepare_lhs_double(L,plhs+0);

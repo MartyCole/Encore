@@ -31,14 +31,10 @@ classdef SphericalGrid
             [obj.theta, obj.phi] = cart_to_sphere(obj.V);
 
             % calculate voronoi areas of the grid
-            obj.A = calc_voronoi_area(obj.V, obj.T);            
+            obj.A = calc_voronoi_area(obj.V, obj.T);
             
-            % TODO: If I can derive a normalisation constant, I could go without doing
-            %       this step to calculate the norms from a grid of B^2 points
-            [~, ~, ~, ~, psi_norm] = tangent_basis(l,100);
-
-            % generate the basis system at points on the icosphere
-            [obj.basis, obj.laplacian, ~, ~, ~] = tangent_basis(l, obj.theta, obj.phi, psi_norm);
+            % generate the basis system at points on the icosphere           
+            [obj.basis, obj.laplacian, ~, ~, ~] = tangent_basis(l, obj.theta, obj.phi, obj.A);
             obj.basis = squeeze(obj.basis);
             obj.laplacian = squeeze(obj.laplacian);
            

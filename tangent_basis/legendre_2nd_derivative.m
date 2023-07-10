@@ -14,10 +14,17 @@ function [ddPlmdx, dPlmdx, Plm] = legendre_2nd_derivative(l,x)
     if size(x,2) == 1
         x = x';
     end
-    
+
+    m = (0:l)';
+
+    % Normalisation constant for Spherical Harmonics
+    Nlm = sqrt(((2*l+1) / (4*pi)) * (factorial(l-m) ./ factorial(l+m)));
+    Nlminus = sqrt((l+m).*(l-m+1));
+    Nlplus  = sqrt((l-m).*(l+m+1));
+        
     % Calculate Plm so that we can use a
     % recursion relation to calculate dPlmdx  
-    Plm = legendre(l,cos(x));
+    Plm = Nlm .* legendre(l,cos(x));
                      
     %% Computation 
     if numel(Plm)==1
@@ -28,8 +35,8 @@ function [ddPlmdx, dPlmdx, Plm] = legendre_2nd_derivative(l,x)
     % Special case of vector Plm
     if size(x,1) == 1
         Plm = permute(Plm, [1 3 2]); 
-    end 
-    
+    end     
+
     % Calculate Pln for n = [-1,0,...,m-1]
     Plminus = [ -Plm(2,:,:) / (l*(l+1)) 
            Plm(1:end-1,:,:)];
@@ -39,7 +46,7 @@ function [ddPlmdx, dPlmdx, Plm] = legendre_2nd_derivative(l,x)
 
     % Calculate the derivative
     m = (0:l)';
-    dPlmdx = -0.5 * (Plminus .* ((l+m).*(l-m+1)) - Plplus);
+    dPlmdx = -0.5 * ((Plminus .* Nlminus) - (Plplus .* Nlplus));
     
     % Calculate dPlndx for n = [-1,0,...,m-1]
     dPlminus = [ dPlmdx(2,:,:) / (l*(l+1)) 
@@ -49,5 +56,5 @@ function [ddPlmdx, dPlmdx, Plm] = legendre_2nd_derivative(l,x)
     dPlplus = [ dPlmdx(2:end,:,:); zeros(1,size(Plm,2),size(Plm,3))];     
     
     % Calculate second derivative
-    ddPlmdx = 0.5 * (dPlminus .* ((l+m).*(l-m+1)) - dPlplus);    
+    ddPlmdx = 0.5 * ((dPlminus .* Nlminus) - (dPlplus .* Nlplus));    
 end

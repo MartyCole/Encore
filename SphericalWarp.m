@@ -10,8 +10,8 @@
 classdef SphericalWarp
     properties
         V
-        J
-        Jdet
+        J     
+        T
     end
     methods
         function obj = SphericalWarp(grid)
@@ -21,12 +21,17 @@ classdef SphericalWarp
             obj.V = grid.V;
 
             % Determinate of the Jacobian Matrix
-            obj.Jdet = ones(P,1);
-            
-            % Jacobian matrix at each vertex
-            obj.J = zeros(P,4);
-            obj.J(:,1) = 1;
-            obj.J(:,4) = 1;           
+            obj.J = ones(P,1);       
+
+            % The triangulation
+            obj.T = grid.T;
+        end
+
+        function plot(obj, fig_title)            
+            title(fig_title)
+            trisurf(obj.T, obj.V(:,1), obj.V(:,2), obj.V(:,3), obj.J)
+            axis off
+            axis equal
         end
     end
 end

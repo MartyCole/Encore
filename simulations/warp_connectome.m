@@ -1,8 +1,8 @@
 function [warped_sp,warped_ep] = warp_connectome(grid,warp,sp,ep)
 
-interpolator = SphericalInterpolator(grid);
-[D_sp,T_sp] = interpolator.get_barycentric_data(sp');
-[D_ep,T_ep] = interpolator.get_barycentric_data(ep');
+tree = AABBtree(grid);
+[D_sp,T_sp] = tree.get_barycentric_data(sp',false);
+[D_ep,T_ep] = tree.get_barycentric_data(ep',false);
 
 wx_sp = dot(D_sp, reshape(warp.V(T_sp,1),length(sp),3),2);
 wy_sp = dot(D_sp, reshape(warp.V(T_sp,2),length(sp),3),2);

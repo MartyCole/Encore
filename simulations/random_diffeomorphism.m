@@ -1,7 +1,7 @@
 function warp = random_diffeomorphism(grid,decayrate,density,iters)
 
 % initialise an identity warp
-warp = SphericalWarp(grid);
+warp = SphericalWarp(grid, 1e-10);
 
 % simulate exponential decay
 decay = exp([linspace(0,-decayrate,grid.num_basis/2), ...
@@ -15,14 +15,9 @@ coeff(randperm(grid.num_basis, floor(grid.num_basis .* density))) = 0;
 gamma = squeeze(sum(-coeff .* grid.basis, 2));
 
 % compose the warp multiple times
-sph_derivative = SphericalDerivative(grid, 1e-5, 'tangent');
-
 for i = 1:iters
-    warp = sph_derivative.compose_warp(0.00001 .* gamma, warp);
-end
-
-% generate the Jacobian
-warp.J = sph_derivative.get_jacobian(warp, true);  
+    warp = warp.compose_warp(0.00001 .* gamma);
+end  
 
 end
 

@@ -44,13 +44,17 @@ warp = random_diffeomorphism(grid,8,0.75,8000);
 
 % calculate smoothed connectomes
 kernel = spherical_kernel(grid,10,0.1);
-Q1 = spherical_kde(grid, kernel, orig_sp.', orig_ep.');
-Q2 = spherical_kde(grid, kernel, warp_sp.', warp_ep.');
+F1 = spherical_kde(grid, kernel, orig_sp.', orig_ep.');
+F2 = spherical_kde(grid, kernel, warp_sp.', warp_ep.');
+
+Q1 = [F1,zeros(size(F1));zeros(size(F1)),F2];
+Q2 = [F2,zeros(size(F1));zeros(size(F1)),F1];
 
 %% Registration test 
 
-[SC_regQ2Q1, warp_Q2Q1] = register_function(grid,Q1,Q2,0.001,1000);
-[SC_regQ1Q2, warp_Q1Q2] = register_function(grid,Q2,Q1,0.001,1000);
+encore = Encore(grid,grid,30,0.001,1000,0);
+
+[SC_reg,lh_warp,rh_warp,~] = encore.register(Q1,Q2);
 
 fprintf('Q2 -> Q1\nOriginal Distance: %0.2f\nRegistered Distance: %0.2f\n\n', ...
     sqrt(sum(diag((Q1 - Q2)*(Q1 - Q2)'))), ...

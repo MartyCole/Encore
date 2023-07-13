@@ -59,8 +59,10 @@ phi = linspace(0,2*pi,n)';
 test_points = sphere_to_cart(theta,phi).';
 
 % setup and run the barycentric interpolation class object
-interpolator = SphericalInterpolator(grid, test_points);
-test_values = interpolator.evaluate_2d(grid_data);
+tree = AABBtree(grid);
+[Vq,Tq] = tree.get_barycentric_data(test_points,true);
+test_values = bary_interp_2D_mex(Vq,Vq,Tq,Tq,grid_data);   
+test_values = (test_values + test_values.') / 2;                
 
 % compare interpolated values to the truth
 truth = test_fun(theta, phi);
@@ -99,38 +101,49 @@ test_fun = @(theta,phi) (sin(theta) .* cos(phi)) * ...
 
 grid_data = test_fun(grid.theta, grid.phi);
 
-% setup and run the barycentric interpolation class object
-sph_derivative = SphericalDerivative(grid, delta, 'polar');
-[dxt, dxp] = sph_derivative.get_derivative(grid_data);
+% the concon object expects a LH and RH warp, so pretend the
+% function is in the domain S2 U S2 using a kronecker product 
+grid_data = kron(eye(1),grid_data);
 
+% setup and run the barycentric interpolation class object
+concon = Concon(grid,grid,delta);
+
+[dxt, dxp] = concon.get_derivative(grid_data);
+
+% the derivative in the direction of the tangent basis
 test_dxt = @(theta,phi) (cos(theta) .* cos(phi)) * ...
                                 (sin(theta) .* cos(phi)).';
-test_dxp = @(theta,phi) (sin(theta) .* -sin(phi)) * ...
+test_dxp = @(theta,phi) (-sin(phi)) * ...
                                 (sin(theta) .* cos(phi)).';
 test_dyt = @(theta,phi) (sin(theta) .* cos(phi)) * ...
                                 (cos(theta) .* cos(phi)).';
 test_dyp = @(theta,phi) (sin(theta) .* cos(phi)) * ...
-                                (sin(theta) .* -sin(phi)).';
+                                (-sin(phi)).';
 
-dxt_mse = mean((dxt - test_dxt(grid.theta, grid.phi)).^2, 'all');
-dxp_mse = mean((dxp - test_dxp(grid.theta, grid.phi)).^2, 'all');
-dyt_mse = mean((dxt' - test_dyt(grid.theta, grid.phi)).^2, 'all');
-dyp_mse = mean((dxp' - test_dyp(grid.theta, grid.phi)).^2, 'all');
+dxt_mse = mean((dxt(1:P,1:P) - test_dxt(grid.theta, grid.phi)).^2, 'all');
+dxp_mse = mean((dxp(1:P,1:P) - test_dxp(grid.theta, grid.phi)).^2, 'all');
+dyt_mse = mean((dxt(1:P,1:P)' - test_dyt(grid.theta, grid.phi)).^2, 'all');
+dyp_mse = mean((dxp(1:P,1:P)' - test_dyp(grid.theta, grid.phi)).^2, 'all');
 
-fprintf('MSE for spatial derivative estimation: %0.4f\n', dxt_mse);
+fprintf('MSE for spatial derivative estimation: %0.4f, %0.4f, %0.4f, %0.4f,\n', ...
+    dxt_mse, dxp_mse, dyt_mse, dyp_mse);
 
 %% Jacobian Test
+
+warp = SphericalWarp(grid,delta);
 
 % test warp and jacobian
 warp_theta = grid.theta.^3 ./ pi^2;
 warp_phi   = grid.phi;
 
+% manually set the warp vertices
 warp.V = sphere_to_cart(warp_theta, warp_phi).';
-warp.J = (3/pi^2) * grid.theta.^2;
 
-% calculate the jacobian of the function using polar coordinates
-sph_derivative = SphericalDerivative(grid, 1e-5, 'polar');
-est_J = sph_derivative.get_jacobian(warp, false);
+% trick class into generating the jacobian by composing an identity warp
+warp = warp.compose_warp(zeros(P,2));
+
+% the jacobian after mapping to the tangent basis
+true_J = abs(((3*grid.theta.^2) ./ pi^2) .* (sin(warp_theta)./(sin(grid.theta)+1e-15)));
 
 % display results
-fprintf('MSE for Jacobian estimation: %0.4f\n', mean((warp.J - est_J).^2));
+fprintf('MSE for Jacobian estimation: %0.4f\n', mean((warp.J - true_J).^2));

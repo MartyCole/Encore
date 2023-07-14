@@ -57,14 +57,12 @@ encore = Encore(grid,grid,30,0.001,1000,0);
 [SC_reg,lh_warp,rh_warp,~] = encore.register(Q1,Q2);
 
 fprintf('Q2 -> Q1\nOriginal Distance: %0.2f\nRegistered Distance: %0.2f\n\n', ...
-    sqrt(sum(diag((Q1 - Q2)*(Q1 - Q2)'))), ...
-    sqrt(sum(diag((Q1 - SC_regQ2Q1)*(Q1 - SC_regQ2Q1)'))))
-
-fprintf('Q1 -> Q2\nOriginal Distance: %0.2f\nRegistered Distance: %0.2f\n', ...
-    sqrt(sum(diag((Q2 - Q1)*(Q2 - Q1)'))), ...
-    sqrt(sum(diag((Q2 - SC_regQ1Q2)*(Q2 - SC_regQ1Q2)'))))
-
+     sqrt(sum(diag((Q1 - Q2)*(Q1 - Q2)'))), ...
+     sqrt(sum(diag((Q1 - SC_reg)*(Q1 - SC_reg)'))))
+ 
 figure(1)
-warp_Q1Q2.plot('Q2 -> Q1')
+lh_warp.plot('Q2 -> Q1')
 figure(2)
-warp_Q2Q1.plot('Q1 -> Q2')
+rh_warp.plot('Q1 -> Q2')
+figure(3)
+imagesc(Q1 + [zeros(size(F1)), SC_reg(1:P,1:P); SC_reg((P+1):end,(P+1):end), zeros(size(F1));])

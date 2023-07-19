@@ -24,9 +24,6 @@ delta = 1e-5;
 % highest order of spherical harmonics for tangent basis
 l = 30; 
 
-% maximum number of iterations for registration
-REG_ITERS = 40000;
-
 %% Setup
 
 % number of vertices on the sphere
@@ -37,9 +34,6 @@ P = (4^ICO_RESOLUTION) * 10 + 2;
 ico_mesh = icosphere(ICO_RESOLUTION); % We can load this from a freesurfer mesh instead
 
 % generate a grid object from the mesh
-% NOTE: This takes a little while because I have not yet derived the
-% normalisation constants for the tangent basis functions. Currently I am
-% numerically estimating the constants over a dense grid.
 grid = SphericalGrid(ico_mesh, l);
 
 %% Interpolation Test
@@ -103,12 +97,12 @@ grid_data = test_fun(grid.theta, grid.phi);
 
 % the concon object expects a LH and RH warp, so pretend the
 % function is in the domain S2 U S2 using a kronecker product 
-grid_data = kron(eye(1),grid_data);
+grid_data = kron(eye(2),grid_data);
 
 % setup and run the barycentric interpolation class object
-concon = Concon(grid,grid,delta);
+interp = SphericalInterpolator(grid,grid,delta);
 
-[dxt, dxp] = concon.get_derivative(grid_data);
+[dxt, dxp] = interp.get_derivative(grid_data);
 
 % the derivative in the direction of the tangent basis
 test_dxt = @(theta,phi) (cos(theta) .* cos(phi)) * ...

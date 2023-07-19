@@ -25,5 +25,13 @@ rh_ep = rh_ep(:,~mask);
 start_points = [lr_sp,lh_sp,rh_sp];
 end_points = [lr_ep,lh_ep,rh_ep];
 
+hemi_sp = randi(2,1,length(start_points)) - 1;
+hemi_ep = hemi_sp;
+idx = randi(length(hemi_ep),1,floor(length(hemi_ep)*0.25));
+hemi_ep(idx) = ~hemi_ep(idx);
+
+start_points = [start_points; hemi_sp];
+end_points = [end_points; hemi_ep];
+
 end
 

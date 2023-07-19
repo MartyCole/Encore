@@ -58,8 +58,8 @@ classdef Concon
 
             [Vq,Tq] = obj.get_coordinate_data(lh_warp.V, rh_warp.V);  
             new_Q = bary_interp_2D_mex(Vq,Vq,Tq,Tq,Q) .* dJ;     
-            new_Q = (new_Q + new_Q.') / 2;                
-            new_Q = new_Q / sqrt(sum(new_Q(:).^2 .* obj.A(:)));
+            new_Q = max((new_Q + new_Q.') / 2, 0);                
+            new_Q = new_Q / sqrt(sum(new_Q(:).^2 .* obj.A(:)));            
         end      
 
         function new_F = evaluate(obj, F, lh_warp, rh_warp)
@@ -68,7 +68,7 @@ classdef Concon
 
             [Vq,Tq] = obj.get_coordinate_data(lh_warp.V, rh_warp.V);  
             new_F = bary_interp_2D_mex(Vq,Vq,Tq,Tq,F) .* dJ;     
-            new_F = (new_F + new_F.') / 2;                
+            new_F = max((new_F + new_F.') / 2, 0);                
         end      
     end
 

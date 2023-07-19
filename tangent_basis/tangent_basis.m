@@ -18,7 +18,7 @@ end
 % Perform double integral in spherical coordinates 
 psi_norm = zeros(size(psi,3),1);
 for i = 1:size(psi,3)
-     psi_norm(i) = sqrt(sum((psi(:,:,i,1).^2 + psi(:,:,i,1).^2) .* dA, 'all'));         
+     psi_norm(i) = sqrt(sum((psi(:,:,i,1).^2 + psi(:,:,i,2).^2) .* dA, 'all'));         
 end
 
 % Apply the normalisation constants

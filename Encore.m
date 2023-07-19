@@ -48,13 +48,14 @@ classdef Encore
             moving_img = Q2;
             FmM = (Q1 - moving_img);
             last_cost = sum(FmM(:).^2 .* obj.A(:));
+            init_cost = last_cost;
 
             P = length(lh_warp.V);
             last_lh_warp = lh_warp;
             last_rh_warp = rh_warp;
             
             fprintf('Initial cost for Sub: %0.6f\n', last_cost)
-            
+
             % start registering
             for iter = 1:obj.max_iters  
                 % calculate the derivative
@@ -74,10 +75,8 @@ classdef Encore
                              c(1:P) * obj.lh_grid.laplacian);               
             
                 % calculate displacement in each basis direction
-                gamma = squeeze(sum(lh_dH .* obj.lh_grid.basis,2));            
-                            
-                % compose the new LH warp with all previous warps
-                lh_warp = lh_warp.compose_warp(obj.delta .* gamma);
+                lh_gamma = squeeze(sum(lh_dH .* obj.lh_grid.basis,2));            
+                lh_step_size = min(obj.delta / max(vecnorm(lh_gamma')), 1);
 
                 % ------------------------------------------------
                 % compute the gradient for the RH warp
@@ -86,29 +85,33 @@ classdef Encore
                              c((P+1):end) * obj.rh_grid.laplacian);               
             
                 % calculate displacement in each basis direction
-                gamma = squeeze(sum(rh_dH .* obj.rh_grid.basis,2));            
-                            
-                % compose the new LH warp with all previous warps
-                rh_warp = rh_warp.compose_warp(obj.delta .* gamma);
+                rh_gamma = squeeze(sum(rh_dH .* obj.rh_grid.basis,2)); 
+                rh_step_size = min(obj.delta / max(vecnorm(rh_gamma')), 1);    
 
-                % ------------------------------------------------            
+                % ------------------------------------------------   
+                % compose the new warps with all previous warps
+                step_size = min(lh_step_size,rh_step_size);
+                
+                lh_warp = lh_warp.compose_warp(step_size .* lh_gamma);                 
+                rh_warp = rh_warp.compose_warp(step_size .* rh_gamma);
+
                 % evaluate function after warping
                 moving_img = obj.concon.evaluate_Q(Q2,lh_warp,rh_warp);
                                
                 % evaluate the new cost
                 FmM = Q1 - moving_img; 
                 cost = sum(FmM(:).^2 .* obj.A(:));
-               
+                
                 if ((last_cost - cost) < obj.threshold)       
                    lh_warp = last_lh_warp;
                    rh_warp = last_rh_warp;
-                   fprintf('Converged (increased cost) %d: %0.6f\n', iter, last_cost)            
+                   fprintf('Converged (increased cost) %d: %0.6f -> %0.6f\n', iter, init_cost, last_cost)            
                    break
                 end
             
                 last_lh_warp = lh_warp;
                 last_rh_warp = rh_warp;
-                last_cost = cost; 
+                last_cost = cost;                 
             
                 % print progress
                 if (mod(iter,10) == 0)       

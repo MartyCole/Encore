@@ -1,9 +1,9 @@
 classdef AABBtree < handle
-    properties (SetAccess = immutable, GetAccess = private)
+    properties (SetAccess = private, GetAccess = private)
         tree_ptr uint64;
     end
 
-    properties (SetAccess = immutable, GetAccess = public)
+    properties (SetAccess = private, GetAccess = public)
         V
         T
     end
@@ -31,6 +31,13 @@ classdef AABBtree < handle
 
         function delete(obj)
             destroy_AABB_tree_mex(obj.tree_ptr);
+        end
+    end
+
+    methods (Static = true)
+        function obj = loadobj(obj)
+            % initialise the AABB tree
+            obj.tree_ptr = init_AABB_tree_mex(obj.V, obj.T);
         end
     end    
 end

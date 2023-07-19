@@ -90,6 +90,7 @@ classdef Encore
             moving_img = Q2;
             FmM = (Q1 - moving_img);
             last_cost = sum(FmM(:).^2 .* obj.A(:));
+            init_cost = last_cost;
 
             P = length(lh_warp.V);
             last_lh_warp = lh_warp;
@@ -142,11 +143,11 @@ classdef Encore
                 % evaluate the new cost
                 FmM = Q1 - moving_img; 
                 cost = sum(FmM(:).^2 .* obj.A(:));
-               
+                
                 if ((last_cost - cost) < obj.threshold)       
                    lh_warp = last_lh_warp;
                    rh_warp = last_rh_warp;
-                   fprintf('Converged (increased cost) %d: %0.6f\n', iter, last_cost)            
+                   fprintf('Converged (increased cost) %d: %0.6f -> %0.6f\n', iter, init_cost, last_cost)            
                    break
                 end
             

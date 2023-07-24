@@ -1,4 +1,8 @@
 classdef Concon
+    properties
+        FWHM
+        epsilon
+    end
     properties (Access = private)        
         delta
         
@@ -42,6 +46,12 @@ classdef Concon
             [obj.D_sp(~obj.in_idx,:),obj.T_sp(~obj.in_idx,:)] = obj.rh_aabb.get_barycentric_data(pts_in(~obj.in_idx,1:3),false);
             [obj.D_ep(~obj.out_idx,:),obj.T_ep(~obj.out_idx,:)] = obj.rh_aabb.get_barycentric_data(pts_out(~obj.out_idx,1:3),false); 
 
+            obj.D_sp = max(0, obj.D_sp);
+            obj.D_ep = max(0, obj.D_ep);
+
+            obj.D_sp = obj.D_sp ./ sum(obj.D_sp,2);
+            obj.D_ep = obj.D_ep ./ sum(obj.D_ep,2);
+
             % radius of an idealised spherical brain
             R = 180/pi;    
             
@@ -50,7 +60,11 @@ classdef Concon
             obj.rh_dst = acos(max(min(rh_grid.V * rh_grid.V.',1),-1))*R;
             
             obj.kernel = obj.spherical_kernel(FWHM,epsilon);
-        end    
+        end   
+
+        function obj = set_kernel(obj, FWHM, epsilon)           
+            obj.kernel = obj.spherical_kernel(FWHM,epsilon);
+        end
 
         function F = evaluate(obj, varargin)
             % find closet vertex for each point  
@@ -72,15 +86,22 @@ classdef Concon
             new_T_sp(~obj.in_idx,:) = new_T_sp(~obj.in_idx,:) + obj.P;
             new_T_ep(~obj.out_idx,:) = new_T_ep(~obj.out_idx,:) + obj.P;
             
+            row = vec(repmat(new_T_sp, 1, 3).');
+            col = vec(repelem(new_T_ep, 1, 3).');
+
+            w = vec(repmat(new_D_sp, 1, 3).') .* vec(repelem(new_D_ep, 1, 3).');
+
+            idx = sub2ind([obj.P2,obj.P2],row,col);
+
             % create the weighted adjacency matrix
-            adj = accumarray([new_T_sp(:),new_T_ep(:)],new_D_sp(:),[obj.P2,obj.P2]) + ...
-                    accumarray([new_T_ep(:),new_T_sp(:)],new_D_ep(:),[obj.P2,obj.P2]);
-            
+            adj = accumarray(idx,w,[obj.P2*obj.P2,1]);
+            adj = reshape(adj,obj.P2,obj.P2);
+            adj = (adj + adj') / 2;
+     
             % generate smooth connectome
-            F = obj.kernel * adj * obj.kernel';
-            F(abs(F) < 1e-16) = 0;
+            F = obj.kernel * adj * obj.kernel';           
             F(F < 0) = 0;
-            F = (F ./ sum(F(:) .* obj.A(:)));
+            %F = F - diag(diag(F));     
         end
     end
 

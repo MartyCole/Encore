@@ -48,8 +48,12 @@ F2 = concon.evaluate(lh_warp,rh_warp);
 %% Registration test 
  
 encore = Encore(grid,grid,33,0.01,1000,0); 
-[reg_lh,reg_rh,~] = encore.register(F1,F2);
+[reg_lh,reg_rh,~,F3] = encore.register(F1,F4,false);
 
+inv_lh = reg_lh.invert_warp();
+inv_rh = reg_rh.invert_warp();
+
+F4 = concon.evaluate(inv_lh,inv_rh);
 figure(1); lh_warp.plot('LH warp'); 
 figure(2); reg_lh.plot('LH reg'); 
 figure(3); rh_warp.plot('RH warp'); 

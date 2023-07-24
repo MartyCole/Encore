@@ -9,9 +9,12 @@
 %   R2022b
 %
 classdef Encore
-    properties (GetAccess = private)
+    properties (GetAccess = public, SetAccess = private)
         lh_grid
-        rh_grid
+        rh_grid        
+    end
+
+    properties (Access = private)
         interp
         A
     end
@@ -36,12 +39,13 @@ classdef Encore
             obj.threshold = threshold;            
         end
 
-        function template = get_template(Fs, iters)
+        function template = get_template(obj, Fs, iters)
             N_subs = size(Fs,3);
             
             % find the mean Q function            
             for i = 1:N_subs
                 Fs(:,:,i) = sqrt(Fs(:,:,i)) ./ sum(Fs(:,:,i) .* obj.A, 'all');  
+                disp(i)
             end
             
             Q_bar = mean(Fs,3);
@@ -50,13 +54,14 @@ classdef Encore
             % find the Q function nearest to the mean
             for i = 1:N_subs
                 Q_norm(i) = sum((Fs(:,:,i) - Q_bar).^2 .* obj.A, 'all');
+                disp(i)
             end
             
             idx = (Q_norm == min(Q_norm));
             Q_mu = Fs(:,:,idx);
             
             % iterate closer the the karcher median
-            for iter = iters
+            for iter = 1:iters
                 vv = zeros(size(Fs));
 
                 for i = 1:N_subs
@@ -69,21 +74,39 @@ classdef Encore
                     end
                 end
                 
-                v_bar = mean(vv,3);    
-                tmp = sum(v_bar(:) .* v_bar(:) .* obj.A(:));
+                v_bar = mean(vv,3);
+                tmp = sqrt(sum(v_bar(:) .* v_bar(:) .* obj.A(:)));
                 Q_mu = (cos(0.2*tmp) * Q_mu) + (sin(0.2*tmp) * (v_bar / tmp));
-                Q_mu = Q_mu / sum(Q_mu(:) .* Q_mu(:) .* obj.A(:));
+                Q_mu = Q_mu / sqrt(sum(Q_mu(:) .* Q_mu(:) .* obj.A(:)));
+
+                fprintf('Template norm: %0.4f\n', tmp);
+
+                if tmp < 0.005
+                    break
+                end
             end
             
             template = Q_mu;
         end
 
-        function [lh_warp,rh_warp,cost] = register(obj,F1,F2) 
-            lh_warp = SphericalWarp(obj.lh_grid,1e-10);
-            rh_warp = SphericalWarp(obj.rh_grid,1e-10);
+        function [lh_warp,rh_warp,cost] = register(obj,F1,concon,F1_is_template,varargin) 
+            if nargin == 6
+                lh_warp = varargin{1};
+                rh_warp = varargin{2};
+                F2 = concon.evaluate(lh_warp,rh_warp);
+            else
+                lh_warp = SphericalWarp(obj.lh_grid,1e-10);
+                rh_warp = SphericalWarp(obj.rh_grid,1e-10);
+                F2 = concon.evaluate();
+            end
 
             % initial functions            
-            Q1 = sqrt(F1 / sum(F1(:) .* obj.A(:)));
+            if (F1_is_template)
+                Q1 = F1;
+            else                
+                Q1 = sqrt(F1 / sum(F1(:) .* obj.A(:)));
+            end
+            
             Q2 = sqrt(F2 / sum(F2(:) .* obj.A(:)));
             
             % initial cost
@@ -112,7 +135,7 @@ classdef Encore
                 
                 % ------------------------------------------------
                 % compute the gradient for the LH warp
-                lh_dH = 2 * (a(1:P) * obj.lh_grid.basis(:,:,1) + ...
+                lh_dH = -2 * (a(1:P) * obj.lh_grid.basis(:,:,1) + ...
                              b(1:P) * obj.lh_grid.basis(:,:,2) + ...
                              c(1:P) * obj.lh_grid.laplacian);               
             
@@ -122,7 +145,7 @@ classdef Encore
 
                 % ------------------------------------------------
                 % compute the gradient for the RH warp
-                rh_dH = 2 * (a((P+1):end) * obj.rh_grid.basis(:,:,1) + ...
+                rh_dH = -2 * (a((P+1):end) * obj.rh_grid.basis(:,:,1) + ...
                              b((P+1):end) * obj.rh_grid.basis(:,:,2) + ...
                              c((P+1):end) * obj.rh_grid.laplacian);               
             
@@ -138,7 +161,9 @@ classdef Encore
                 rh_warp = rh_warp.compose_warp(step_size .* rh_gamma);
 
                 % evaluate function after warping
-                moving_img = obj.interp.interp_Q(Q2,lh_warp,rh_warp);
+                F2 = concon.evaluate(lh_warp,rh_warp);
+                moving_img = sqrt(F2 / sum(F2(:) .* obj.A(:)));
+                %moving_img = obj.interp.interp_Q(Q2,lh_warp,rh_warp);
                                
                 % evaluate the new cost
                 FmM = Q1 - moving_img; 
@@ -159,7 +184,7 @@ classdef Encore
                 if (mod(iter,10) == 0)       
                     fprintf('Iteration %d cost: %0.6f\n', iter, cost); 
                 end
-            end          
+            end
         end
     end
 end

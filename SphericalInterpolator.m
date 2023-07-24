@@ -57,8 +57,8 @@ classdef SphericalInterpolator
             dJ = sqrt(dJ) * sqrt(dJ).';     
 
             [Vq,Tq] = obj.get_coordinate_data(lh_warp.V, rh_warp.V);  
-            new_Q = bary_interp_2D_mex(Vq,Vq,Tq,Tq,Q) .* dJ;     
-            new_Q = (new_Q + new_Q.') / 2;                
+            new_Q = bary_interp_2D_mex(Vq,Vq,Tq,Tq,Q) .* dJ;                 
+            new_Q = max((new_Q + new_Q.') / 2, 0);
             new_Q = new_Q / sqrt(sum(new_Q(:).^2 .* obj.A(:)));
         end
     end

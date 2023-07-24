@@ -79,6 +79,26 @@ classdef SphericalWarp
             obj.J = obj.get_jacobian();
         end        
 
+	function obj = invert_warp(obj)
+            tangent_vec = sphere_log_map(obj.V,obj.aabb.V);
+
+            grid.V = obj.V;
+            grid.T = obj.T;
+
+            tmp_aabb = AABBtree(grid);
+
+            % Compose the new warp to the current overall warp
+            [Vx,Tx] = tmp_aabb.get_barycentric_data(obj.aabb.V, false);
+
+            tangent_vec = obj.parallel_transport(tangent_vec(Tx,:)', obj.V(Tx,:)', repmat(obj.aabb.V,3,1)')';
+            tangent_vec = Vx(:) .* tangent_vec;
+            tangent_vec = squeeze(sum(reshape(tangent_vec, obj.P, 3, 3), 2));
+
+            % Project to sphere
+            obj.V = normr(sphere_exp_map(obj.V, tangent_vec));
+            obj.J = obj.get_jacobian();
+        end
+
         function plot(obj, fig_title)            
             title(fig_title)
             trisurf(obj.T, obj.V(:,1), obj.V(:,2), obj.V(:,3), obj.J)

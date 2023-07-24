@@ -36,6 +36,56 @@ classdef Encore
             obj.threshold = threshold;            
         end
 
+	function template = get_template(obj, Fs, iters)
+            N_subs = size(Fs,3);
+            
+            % find the mean Q function            
+            for i = 1:N_subs
+                Fs(:,:,i) = sqrt(Fs(:,:,i)) ./ sum(Fs(:,:,i) .* obj.A, 'all');  
+                disp(i)
+            end
+            
+            Q_bar = mean(Fs,3);
+            Q_norm = zeros(1,N_subs);
+            
+            % find the Q function nearest to the mean
+            for i = 1:N_subs
+                Q_norm(i) = sum((Fs(:,:,i) - Q_bar).^2 .* obj.A, 'all');
+                disp(i)
+            end
+            
+            idx = (Q_norm == min(Q_norm));
+            Q_mu = Fs(:,:,idx);
+            
+            % iterate closer the the karcher median
+            for iter = 1:iters
+                vv = zeros(size(Fs));
+
+                for i = 1:N_subs
+                    tmpQ = Fs(:,:,i);
+                    
+                    tmp_theta = acos(sum(tmpQ(:) .* Q_mu(:) .* obj.A(:)));
+                    
+                    if tmp_theta > 0
+                        vv(:,:,i) = (tmp_theta / sin(tmp_theta)) * (tmpQ - cos(tmp_theta)*Q_mu);
+                    end
+                end
+                
+                v_bar = mean(vv,3);
+                tmp = sqrt(sum(v_bar(:) .* v_bar(:) .* obj.A(:)));
+                Q_mu = (cos(0.2*tmp) * Q_mu) + (sin(0.2*tmp) * (v_bar / tmp));
+                Q_mu = Q_mu / sqrt(sum(Q_mu(:) .* Q_mu(:) .* obj.A(:)));
+
+                fprintf('Template norm: %0.4f\n', tmp);
+
+                if tmp < 0.005
+                    break
+                end
+            end
+            
+            template = Q_mu;
+        end
+
         function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2) 
             lh_warp = SphericalWarp(obj.lh_grid,1e-10);
             rh_warp = SphericalWarp(obj.rh_grid,1e-10);

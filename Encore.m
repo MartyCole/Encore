@@ -41,7 +41,7 @@ classdef Encore
             
             % find the mean Q function            
             for i = 1:N_subs
-                Fs(:,:,i) = sqrt(Fs(:,:,i)) ./ sum(Fs(:,:,i) .* obj.A, 'all');  
+                Fs(:,:,i) = sqrt(Fs(:,:,i) ./ sum(Fs(:,:,i) .* obj.A, 'all'));  
                 disp(i)
             end
             
@@ -54,24 +54,31 @@ classdef Encore
                 disp(i)
             end
             
-            idx = (Q_norm == min(Q_norm));
+            idx = find(Q_norm == min(Q_norm));
             Q_mu = Fs(:,:,idx);
             
             % iterate closer the the karcher median
             for iter = 1:iters
                 vv = zeros(size(Fs));
-
+                distance = zeros(N_subs,1);
+                    
                 for i = 1:N_subs
                     tmpQ = Fs(:,:,i);
                     
-                    tmp_theta = acos(sum(tmpQ(:) .* Q_mu(:) .* obj.A(:)));
+                    tmpTheta = sum(tmpQ(:) .* Q_mu(:) .* obj.A(:));
                     
-                    if tmp_theta > 0
-                        vv(:,:,i) = (tmp_theta / sin(tmp_theta)) * (tmpQ - cos(tmp_theta)*Q_mu);
+                    if 1 - abs(tmpTheta) < 1e-14
+                        tmpTheta = sign(tmpTheta);
+                    end
+
+                    distance(i) = acos(tmpTheta);
+                    
+                    if distance(i) > 0
+                        vv(:,:,i) = ((distance(i) / sin(distance(i))) * (tmpQ - cos(distance(i))*Q_mu)) / distance(i);
                     end
                 end
                 
-                v_bar = mean(vv,3);
+                v_bar = sum(vv,3) / sum(1./distance(distance > 0));
                 tmp = sqrt(sum(v_bar(:) .* v_bar(:) .* obj.A(:)));
                 Q_mu = (cos(0.2*tmp) * Q_mu) + (sin(0.2*tmp) * (v_bar / tmp));
                 Q_mu = Q_mu / sqrt(sum(Q_mu(:) .* Q_mu(:) .* obj.A(:)));
@@ -86,12 +93,17 @@ classdef Encore
             template = Q_mu;
         end
 
-        function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2) 
+        function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2,is_template) 
             lh_warp = SphericalWarp(obj.lh_grid,1e-10);
             rh_warp = SphericalWarp(obj.rh_grid,1e-10);
 
-            % initial functions            
-            Q1 = sqrt(F1 / sum(F1(:) .* obj.A(:)));
+            % initial functions      
+            if is_template
+                Q1 = F1;
+            else                
+                Q1 = sqrt(F1 / sum(F1(:) .* obj.A(:)));
+            end
+
             Q2 = sqrt(F2 / sum(F2(:) .* obj.A(:)));
             
             % initial cost
@@ -169,7 +181,7 @@ classdef Encore
                 end
             end 
             
-            result = obj.concon.evaluate(F2,lh_warp,rh_warp);            
+            result = obj.concon.evaluate(F2,lh_warp,rh_warp);              
         end
     end
 end

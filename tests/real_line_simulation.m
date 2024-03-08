@@ -1,6 +1,7 @@
 % The purpose of this script:
 %   * Simulate registration of a population using gradient descent
 
+addpath('../real_line')
 clear variables;
 close all;
 

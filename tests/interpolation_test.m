@@ -103,7 +103,7 @@ grid_data = test_fun(grid.theta, grid.phi);
 
 % the concon object expects a LH and RH warp, so pretend the
 % function is in the domain S2 U S2 using a kronecker product 
-grid_data = kron(eye(1),grid_data);
+grid_data = kron(eye(2),grid_data);
 
 % setup and run the barycentric interpolation class object
 concon = Concon(grid,grid,delta);

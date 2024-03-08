@@ -16,6 +16,7 @@ kernel(dst > max_dist) = 0;
 
 % normalise the kernel so that counts stay the same
 kernel = kernel ./ sum(kernel,2);
+kernel = kron(eye(2),kernel);
 
 end
 

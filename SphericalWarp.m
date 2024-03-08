@@ -80,7 +80,7 @@ classdef SphericalWarp
         end        
 
 	function obj = invert_warp(obj)
-            tangent_vec = sphere_log_map(obj.V,obj.aabb.V);
+            tangent_vec = sphere_log_map(obj.V,obj.aabb.V);            
 
             grid.V = obj.V;
             grid.T = obj.T;
@@ -95,13 +95,13 @@ classdef SphericalWarp
             tangent_vec = squeeze(sum(reshape(tangent_vec, obj.P, 3, 3), 2));
 
             % Project to sphere
-            obj.V = normr(sphere_exp_map(obj.V, tangent_vec));
+            obj.V = normr(sphere_exp_map(obj.aabb.V, tangent_vec));
             obj.J = obj.get_jacobian();
         end
 
-        function plot(obj, fig_title)            
-            title(fig_title)
+        function plot(obj, fig_title) 
             trisurf(obj.T, obj.V(:,1), obj.V(:,2), obj.V(:,3), obj.J)
+            title(fig_title)
             axis off
             axis equal
         end

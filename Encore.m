@@ -93,12 +93,20 @@ classdef Encore
             template = Q_mu;
         end
 
-        function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2,is_template) 
+        function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2,varargin)
+            p = inputParser;
+            addParameter(p, 'is_template', false, @islogical);
+            addParameter(p, 'verbose', 0, @isnumeric);
+
+            % parse optional variables
+            parse(p, varargin{:});
+            params = p.Results;
+
             lh_warp = SphericalWarp(obj.lh_grid,1e-10);
             rh_warp = SphericalWarp(obj.rh_grid,1e-10);
 
             % initial functions      
-            if is_template
+            if params.is_template
                 Q1 = F1;
             else                
                 Q1 = sqrt(F1 / sum(F1(:) .* obj.A(:)));
@@ -126,36 +134,34 @@ classdef Encore
                 % evaluate derivative of the cost function
                 FmM = FmM .* obj.A;
             
-                a = sum(FmM .* (2*dQ2e1), 1);
-                b = sum(FmM .* (2*dQ2e2), 1);
-                c = sum(FmM .* moving_img, 1);
+                a = sum(FmM .* (2*dQ2e1), 2).';
+                b = sum(FmM .* (2*dQ2e2), 2).';
+                c = FmM .* moving_img;
                 
                 % ------------------------------------------------
                 % compute the gradient for the LH warp
                 lh_dH = 2 * (a(1:P) * obj.lh_grid.basis(:,:,1) + ...
                              b(1:P) * obj.lh_grid.basis(:,:,2) + ...
-                             c(1:P) * obj.lh_grid.laplacian);               
+                             sum(c(1:P,:),2).' * obj.lh_grid.laplacian);               
             
                 % calculate displacement in each basis direction
-                lh_gamma = squeeze(sum(lh_dH .* obj.lh_grid.basis,2));            
-                lh_step_size = min(obj.delta / max(vecnorm(lh_gamma')), 1);
-
+                lh_step_size = obj.delta / (norm(lh_dH) + 1e-15);
+                lh_gamma = squeeze(sum(lh_dH .* obj.lh_grid.basis,2)); 
+                
                 % ------------------------------------------------
                 % compute the gradient for the RH warp
                 rh_dH = 2 * (a((P+1):end) * obj.rh_grid.basis(:,:,1) + ...
                              b((P+1):end) * obj.rh_grid.basis(:,:,2) + ...
-                             c((P+1):end) * obj.rh_grid.laplacian);               
+                             sum(c((P+1):end,:),2).' * obj.rh_grid.laplacian);               
             
                 % calculate displacement in each basis direction
-                rh_gamma = squeeze(sum(rh_dH .* obj.rh_grid.basis,2)); 
-                rh_step_size = min(obj.delta / max(vecnorm(rh_gamma')), 1);    
+                rh_step_size = obj.delta / (norm(rh_dH) + 1e-15);
+                rh_gamma = squeeze(sum(rh_dH .* obj.rh_grid.basis,2));                 
 
                 % ------------------------------------------------   
-                % compose the new warps with all previous warps
-                step_size = min(lh_step_size,rh_step_size);
-                
-                lh_warp = lh_warp.compose_warp(step_size .* lh_gamma);                 
-                rh_warp = rh_warp.compose_warp(step_size .* rh_gamma);
+                % compose the new warps with all previous warps                
+                lh_warp = lh_warp.compose_warp(lh_step_size .* lh_gamma);                 
+                rh_warp = rh_warp.compose_warp(rh_step_size .* rh_gamma);
 
                 % evaluate function after warping
                 moving_img = obj.concon.evaluate_Q(Q2,lh_warp,rh_warp);
@@ -177,10 +183,17 @@ classdef Encore
             
                 % print progress
                 if (mod(iter,10) == 0)       
-                    fprintf('Iteration %d cost: %0.6f\n', iter, cost); 
+                    fprintf('Iteration %d cost: %0.6f\n', iter, cost);                     
                 end
-            end 
-            
+
+                if (params.verbose > 0)
+                    figure(params.verbose)
+                    lh_warp.plot('Estimated LH-Warp')
+                    clim([0 2])
+                    view([0 90 0]);
+                end
+            end             
+
             result = obj.concon.evaluate(F2,lh_warp,rh_warp);              
         end
     end

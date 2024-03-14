@@ -12,7 +12,7 @@ classdef Encore
     properties (GetAccess = private)
         lh_grid
         rh_grid
-        concon
+        interpolator
         A
     end
 
@@ -27,7 +27,7 @@ classdef Encore
             obj.lh_grid = SphericalGrid(lh_mesh,l);
             obj.rh_grid = SphericalGrid(rh_mesh,l);
              
-            obj.concon = Concon(obj.lh_grid, obj.rh_grid, 1e-10);
+            obj.interpolator = ConConInterpolator(obj.lh_grid, obj.rh_grid, 1e-10);
 
             obj.A = [obj.lh_grid.A; obj.rh_grid.A] * [obj.lh_grid.A; obj.rh_grid.A].';
 
@@ -93,7 +93,7 @@ classdef Encore
             template = Q_mu;
         end
 
-        function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2,varargin)
+        function [result,lh_warp,rh_warp,cost] = register(obj,F1,F2,kernel,varargin)            
             p = inputParser;
             addParameter(p, 'is_template', false, @islogical);
             addParameter(p, 'verbose', 0, @isnumeric);
@@ -102,57 +102,75 @@ classdef Encore
             parse(p, varargin{:});
             params = p.Results;
 
+            F2 = copy(F2);
             lh_warp = SphericalWarp(obj.lh_grid,1e-10);
-            rh_warp = SphericalWarp(obj.rh_grid,1e-10);
+            rh_warp = SphericalWarp(obj.rh_grid,1e-10);      
 
             % initial functions      
             if params.is_template
                 Q1 = F1;
             else                
-                Q1 = sqrt(F1 / sum(F1(:) .* obj.A(:)));
+                Q1 = sqrt(F1.evaluate(kernel, true));
             end
-
-            Q2 = sqrt(F2 / sum(F2(:) .* obj.A(:)));
+            
+            Q2 = sqrt(F2.evaluate(kernel, true));
             
             % initial cost
             moving_img = Q2;
             FmM = (Q1 - moving_img);
-            last_cost = sum(FmM(:).^2 .* obj.A(:));
-            init_cost = last_cost;
+
+            cost = zeros(obj.max_iters+1,1);
+            cost(1) = sum(FmM(:).^2 .* obj.A(:));            
 
             P = length(lh_warp.V);
+            P2 = length(lh_warp.V) + length(rh_warp.V);
+
             last_lh_warp = lh_warp;
             last_rh_warp = rh_warp;
             
-            fprintf('Initial cost for Sub: %0.6f\n', last_cost)
+            fprintf('Initial cost for Sub: %0.6f\n', cost(1))
+
+            idx_a = 1:P;
+            idx_b = (P+1):P2;
 
             % start registering
             for iter = 1:obj.max_iters  
                 % calculate the derivative
-                [dQ2e1, dQ2e2] = obj.concon.get_derivative(moving_img);
+                [dQ2e1, dQ2e2] = obj.interpolator.get_derivative(moving_img);
             
                 % evaluate derivative of the cost function
                 FmM = FmM .* obj.A;
             
-                a = sum(FmM .* (2*dQ2e1), 2).';
-                b = sum(FmM .* (2*dQ2e2), 2).';
-                c = FmM .* moving_img;
-                
                 % ------------------------------------------------
                 % compute the gradient for the LH warp
-                lh_dH = 2 * (a(1:P) * obj.lh_grid.basis(:,:,1) + ...
-                             b(1:P) * obj.lh_grid.basis(:,:,2) + ...
-                             sum(c(1:P,:),2).' * obj.lh_grid.laplacian);               
+                a = 2 * sum(FmM(idx_a,idx_a) .* dQ2e1(idx_a,idx_a),2) + ...
+                           sum(FmM(idx_a,idx_b) .* dQ2e1(idx_a,idx_b),2);
+
+                b = 2 * sum(FmM(idx_a,idx_a) .* dQ2e2(idx_a,idx_a),2) + ...
+                           sum(FmM(idx_a,idx_b) .* dQ2e2(idx_a,idx_b),2);
+
+                c = sum(FmM(idx_a,:) .* moving_img(idx_a,:),2);
+
+                lh_dH = -2 * (sum(a.*obj.lh_grid.basis(:,:,1)) + ...
+                              sum(b.*obj.lh_grid.basis(:,:,2)) + ...
+                              sum(c.*obj.lh_grid.laplacian));
             
                 % calculate displacement in each basis direction
                 lh_step_size = obj.delta / (norm(lh_dH) + 1e-15);
                 lh_gamma = squeeze(sum(lh_dH .* obj.lh_grid.basis,2)); 
                 
                 % ------------------------------------------------
-                % compute the gradient for the RH warp
-                rh_dH = 2 * (a((P+1):end) * obj.rh_grid.basis(:,:,1) + ...
-                             b((P+1):end) * obj.rh_grid.basis(:,:,2) + ...
-                             sum(c((P+1):end,:),2).' * obj.rh_grid.laplacian);               
+                a = 2 * sum(FmM(idx_b,idx_b) .* dQ2e1(idx_b,idx_b),2) + ...
+                           sum(FmM(idx_b,idx_a) .* dQ2e1(idx_b,idx_a),2);
+
+                b = 2 * sum(FmM(idx_b,idx_b) .* dQ2e2(idx_b,idx_b),2) + ...
+                           sum(FmM(idx_b,idx_a) .* dQ2e2(idx_b,idx_a),2);
+
+                c = sum(FmM(idx_b,:) .* moving_img(idx_b,:),2);
+
+                rh_dH = -2 * (sum(a.*obj.rh_grid.basis(:,:,1)) + ...
+                              sum(b.*obj.rh_grid.basis(:,:,2)) + ...
+                              sum(c.*obj.rh_grid.laplacian));           
             
                 % calculate displacement in each basis direction
                 rh_step_size = obj.delta / (norm(rh_dH) + 1e-15);
@@ -162,39 +180,56 @@ classdef Encore
                 % compose the new warps with all previous warps                
                 lh_warp = lh_warp.compose_warp(lh_step_size .* lh_gamma);                 
                 rh_warp = rh_warp.compose_warp(rh_step_size .* rh_gamma);
-
-                % evaluate function after warping
-                moving_img = obj.concon.evaluate_Q(Q2,lh_warp,rh_warp);
-                               
+                
+                F2.warp_connectome(lh_warp, rh_warp);                
+                moving_img = sqrt(F2.evaluate(kernel, true));
+                
                 % evaluate the new cost
                 FmM = Q1 - moving_img; 
-                cost = sum(FmM(:).^2 .* obj.A(:));
+                cost(iter+1) = sum(FmM(:).^2 .* obj.A(:));
                 
-                if ((last_cost - cost) < obj.threshold)       
+                if ((cost(iter) - cost(iter+1)) < obj.threshold)       
                    lh_warp = last_lh_warp;
                    rh_warp = last_rh_warp;
-                   fprintf('Converged (increased cost) %d: %0.6f -> %0.6f\n', iter, init_cost, last_cost)            
+                   fprintf('Converged (increased cost) %d: %0.6f -> %0.6f\n', iter, cost(1), cost(iter))            
                    break
                 end
             
                 last_lh_warp = lh_warp;
-                last_rh_warp = rh_warp;
-                last_cost = cost;                 
+                last_rh_warp = rh_warp;                           
             
-                % print progress
-                if (mod(iter,10) == 0)       
-                    fprintf('Iteration %d cost: %0.6f\n', iter, cost);                     
-                end
-
+                % show progress if asked
                 if (params.verbose > 0)
-                    figure(params.verbose)
+                    fig = figure(params.verbose);
+                    t = tiledlayout(2,2);
+                    t.Padding = 'compact';
+                    t.TileSpacing = 'compact';
+
+                    nexttile
                     lh_warp.plot('Estimated LH-Warp')
                     clim([0 2])
                     view([0 90 0]);
-                end
-            end             
+                    nexttile
+                    rh_warp.plot('Estimated RH-Warp')
+                    clim([0 2])
+                    view([0 90 0]);
 
-            result = obj.concon.evaluate(F2,lh_warp,rh_warp);              
+                    nexttile([1,2])
+                    plot(1:(iter+1),cost(1:(iter+1)))
+                    xlim([1,100]);
+                    ylim([0,cost(1)]);
+                    title(sprintf('Iteration %d cost: %0.6f\n', iter, cost(iter+1)));
+
+                    fig.Units = "normalized";
+                    fig.OuterPosition = [0.154166666666667 0.08 0.411805555555556 0.834444444444444];
+                end
+            end                      
+           
+            % evaluate function after warping
+            F2.warp_connectome(lh_warp, rh_warp);                
+            result = F2;
+
+            cost = cost(1:iter+1);
         end
     end
 end

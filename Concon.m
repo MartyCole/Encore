@@ -1,87 +1,121 @@
-classdef Concon
+classdef Concon < matlab.mixin.Copyable
     properties (Access = private)        
-        delta
-        
-        P    
-        A
-        
-        p_Vx
-        p_Tx
-        p_Vy
-        p_Ty
-        m_Vx
-        m_Tx
-        m_Vy
-        m_Ty
-        
-        Vg
-        Tg
+        orig_st_points
+        orig_en_points
+        orig_st_idx
+        orig_en_idx
 
+        st_points
+        en_points
+        st_hemi
+        en_hemi
+        st_idx
+        en_idx
+
+        P    
+        A  
+        N
+
+        lh_grid
+        rh_grid
+    end
+    properties (Access = private, NonCopyable)
         lh_aabb
         rh_aabb
     end
     methods
-        function obj = Concon(lh_grid, rh_grid, delta)          
-            % Small value for derivatives
-            obj.delta = delta*2;   
-            
+        function obj = Concon(lh_grid, rh_grid, st_points, en_points, st_hemi, en_hemi)           
             % Grid theta, phi, and size P
             obj.P = length(lh_grid.V);
             obj.A = [lh_grid.A; rh_grid.A] * [lh_grid.A; rh_grid.A].';
 
+            obj.lh_grid = lh_grid;
+            obj.rh_grid = rh_grid;
             obj.lh_aabb = AABBtree(lh_grid);
             obj.rh_aabb = AABBtree(rh_grid);
+
+            obj.N = length(st_points);
+            obj.st_hemi = st_hemi;
+            obj.en_hemi = en_hemi;
             
-            % Interpolated values at delta coordinates
-            [obj.p_Vx,obj.p_Tx] = obj.get_coordinate_data(sphere_exp_map(lh_grid.V, lh_grid.e1 * delta), ...
-                                                          sphere_exp_map(rh_grid.V, rh_grid.e1 * delta));
-            [obj.m_Vx,obj.m_Tx] = obj.get_coordinate_data(sphere_exp_map(lh_grid.V, lh_grid.e1 * -delta), ...
-                                                          sphere_exp_map(rh_grid.V, rh_grid.e1 * -delta));
-            [obj.p_Vy,obj.p_Ty] = obj.get_coordinate_data(sphere_exp_map(lh_grid.V, lh_grid.e2 * delta), ...
-                                                          sphere_exp_map(rh_grid.V, rh_grid.e2 * delta));
-            [obj.m_Vy,obj.m_Ty] = obj.get_coordinate_data(sphere_exp_map(lh_grid.V, lh_grid.e2 * -delta), ...
-                                                          sphere_exp_map(rh_grid.V, rh_grid.e2 * -delta));  
+            obj.st_points = zeros(obj.N,3);
+            obj.en_points = zeros(obj.N,3);    
+            obj.st_idx = zeros(obj.N,3);
+            obj.en_idx = zeros(obj.N,3);   
             
-            [obj.Vg,obj.Tg] = obj.get_coordinate_data(lh_grid.V,rh_grid.V);            
+            obj.get_coordinate_data(st_points, en_points)
+
+            obj.orig_st_points = obj.st_points;
+            obj.orig_en_points = obj.en_points;
+            obj.orig_st_idx = obj.st_idx;
+            obj.orig_en_idx = obj.en_idx;
         end
 
-        function [dQe1,dQe2] = get_derivative(obj, Q)          
-            dQe1 = (bary_interp_2D_mex(obj.Vg,obj.p_Vx,obj.Tg,obj.p_Tx,Q) - ...
-                    bary_interp_2D_mex(obj.Vg,obj.m_Vx,obj.Tg,obj.m_Tx,Q)) / obj.delta;
-            dQe2 = (bary_interp_2D_mex(obj.Vg,obj.p_Vy,obj.Tg,obj.p_Ty,Q) - ...
-                    bary_interp_2D_mex(obj.Vg,obj.m_Vy,obj.Tg,obj.m_Ty,Q)) / obj.delta;
-        end     
+        function connectome = evaluate(obj, kernel, weighted)
+            if weighted == true             
+                [idx_a,idx_b] = ndgrid(1:3,1:3);
 
-        function new_Q = evaluate_Q(obj, Q, lh_warp, rh_warp)
-            dJ = [lh_warp.J;rh_warp.J];
-            dJ = sqrt(dJ) * sqrt(dJ).';     
+                data = obj.st_points(:,idx_a(:)).*obj.en_points(:,idx_b(:));
+                T_sp = obj.st_idx(:,idx_a(:));
+                T_ep = obj.en_idx(:,idx_b(:));
 
-            [Vq,Tq] = obj.get_coordinate_data(lh_warp.V, rh_warp.V);  
-            new_Q = bary_interp_2D_mex(Vq,Vq,Tq,Tq,Q) .* dJ;     
-            new_Q = max((new_Q + new_Q.') / 2, 0);                
-            new_Q = new_Q / sqrt(sum(new_Q(:).^2 .* obj.A(:))); 
-            new_Q = new_Q - diag(diag(new_Q));
-        end      
+                adjacency = accumarray([T_sp(:),T_ep(:)], data(:));
+            else
+                [~,idx_a] = min(obj.st_points,[],2,'linear');
+                [~,idx_b] = min(obj.en_points,[],2,'linear');
 
-        function new_F = evaluate(obj, F, lh_warp, rh_warp)
-            dJ = [lh_warp.J;rh_warp.J];
-            dJ = dJ * dJ.';     
+                % create adjacency matrix from endpoints
+                adjacency = full(sparse(obj.st_idx(idx_a), obj.en_idx(idx_b), 1, 2*size(grid.V,1), 2*size(grid.V,1)));
+            end
 
-            [Vq,Tq] = obj.get_coordinate_data(lh_warp.V, rh_warp.V);  
-            new_F = bary_interp_2D_mex(Vq,Vq,Tq,Tq,F) .* dJ;     
-            new_F = max((new_F + new_F.') / 2, 0);       
-            new_F = new_F - diag(diag(new_F));
-        end      
+            adjacency = adjacency + adjacency.';
+
+            % generate smooth connectome
+            connectome = max(kernel * adjacency * kernel.',0);
+            connectome = connectome ./ sum(connectome(:).*obj.A(:));
+        end
+
+        function warp_connectome(obj,lh_warp,rh_warp)
+            warp.V = [lh_warp.V; rh_warp.V];
+
+            wx_sp = dot(obj.orig_st_points, reshape(warp.V(obj.orig_st_idx,1),length(obj.orig_st_points),3),2);
+            wy_sp = dot(obj.orig_st_points, reshape(warp.V(obj.orig_st_idx,2),length(obj.orig_st_points),3),2);
+            wz_sp = dot(obj.orig_st_points, reshape(warp.V(obj.orig_st_idx,3),length(obj.orig_st_points),3),2);            
+            
+            warped_st_points = normr([wx_sp,wy_sp,wz_sp]);
+            
+            wx_ep = dot(obj.orig_en_points, reshape(warp.V(obj.orig_en_idx,1),length(obj.orig_en_points),3),2);
+            wy_ep = dot(obj.orig_en_points, reshape(warp.V(obj.orig_en_idx,2),length(obj.orig_en_points),3),2);
+            wz_ep = dot(obj.orig_en_points, reshape(warp.V(obj.orig_en_idx,3),length(obj.orig_en_points),3),2);            
+            
+            warped_en_points = normr([wx_ep,wy_ep,wz_ep]);        
+
+            obj.get_coordinate_data(warped_st_points, warped_en_points)
+        end
+    end
+
+    methods(Access = protected)
+        function cpObj = copyElement(obj)
+            cpObj = copyElement@matlab.mixin.Copyable(obj);
+
+            cpObj.lh_aabb = AABBtree(obj.lh_grid);
+            cpObj.rh_aabb = AABBtree(obj.rh_grid);
+        end
     end
 
     methods (Access = private)
-        function [dV,dT] = get_coordinate_data(obj,lh_pts,rh_pts)                            
-            % Interpolated values at delta coordinates
-            [lh_V,lh_T] = obj.lh_aabb.get_barycentric_data(lh_pts, true);
-            [rh_V,rh_T] = obj.rh_aabb.get_barycentric_data(rh_pts, true);
-            
-            dV = [lh_V,rh_V];
-            dT = [lh_T,rh_T + obj.P];
+        function get_coordinate_data(obj,st_points,en_points)                            
+            [obj.st_points(obj.st_hemi == 0,:), ...
+                obj.st_idx(obj.st_hemi == 0,:)] = obj.lh_aabb.get_barycentric_data(st_points(obj.st_hemi == 0,:),false);
+            [obj.en_points(obj.en_hemi == 0,:), ...
+                obj.en_idx(obj.en_hemi == 0,:)] = obj.lh_aabb.get_barycentric_data(en_points(obj.en_hemi == 0,:),false);
+            [obj.st_points(obj.st_hemi == 1,:), ...
+                obj.st_idx(obj.st_hemi == 1,:)] = obj.rh_aabb.get_barycentric_data(st_points(obj.st_hemi == 1,:),false);
+            [obj.en_points(obj.en_hemi == 1,:), ...
+                obj.en_idx(obj.en_hemi == 1,:)] = obj.rh_aabb.get_barycentric_data(en_points(obj.en_hemi == 1,:),false);
+           
+            obj.st_idx(obj.st_hemi == 1,:) = obj.st_idx(obj.st_hemi == 1,:) + obj.P;
+            obj.en_idx(obj.en_hemi == 1,:) = obj.en_idx(obj.en_hemi == 1,:) + obj.P;
         end
     end
 end

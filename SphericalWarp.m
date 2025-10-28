@@ -7,7 +7,7 @@
 % MATLAB VERSION:
 %   R2022b
 %
-classdef SphericalWarp
+classdef SphericalWarp < matlab.mixin.Copyable
     properties
         V
         J     
@@ -26,7 +26,9 @@ classdef SphericalWarp
         m_Ty               
        
         e1
-        e2
+        e2    
+    end
+    properties (Access = private, NonCopyable)
         aabb        
     end
     methods
@@ -73,7 +75,7 @@ classdef SphericalWarp
             
             % Project to sphere
             obj.V = normr(sphere_exp_map(obj.V, tangent_vec));
-        end        
+        end      
 
 	    function obj = invert_warp(obj)
             tangent_vec = sphere_log_map(obj.V,obj.aabb.V);            
@@ -92,6 +94,44 @@ classdef SphericalWarp
 
             % Project to sphere
             obj.V = normr(sphere_exp_map(obj.aabb.V, tangent_vec));
+        end
+
+        function obj = resample(obj, new_grid, delta)
+            tangent_vec = sphere_log_map(obj.aabb.V,obj.V);
+
+            % Compose the new warp to the current overall warp
+            [Vx,Tx] = obj.aabb.get_barycentric_data(new_grid.V, false);
+
+            tangent_vec = obj.parallel_transport(tangent_vec(Tx,:)', obj.aabb.V(Tx,:)', repmat(new_grid.V,3,1)')';            
+            tangent_vec = Vx(:) .* tangent_vec;
+            tangent_vec = squeeze(sum(reshape(tangent_vec, size(new_grid.V,1), 3, 3), 2));
+            
+            % Project to sphere
+            obj.V = normr(sphere_exp_map(new_grid.V, tangent_vec));
+
+            obj.e1 = new_grid.e1;
+            obj.e2 = new_grid.e2;
+            obj.P = size(new_grid.V,1);
+
+            % The triangulation
+            obj.T = new_grid.T;
+     
+            % Offset vertices along e1 and e2 (the tangent basis)
+            p_Dx = sphere_exp_map(new_grid.V, new_grid.e1 * delta);
+            p_Dy = sphere_exp_map(new_grid.V, new_grid.e2 * delta);
+            m_Dx = sphere_exp_map(new_grid.V, new_grid.e1 * -delta);
+            m_Dy = sphere_exp_map(new_grid.V, new_grid.e2 * -delta);
+            
+            obj.aabb = AABBtree(new_grid);
+            
+            % Interpolated values at delta coordinates
+            [obj.p_Vx,obj.p_Tx] = obj.aabb.get_barycentric_data(p_Dx, false);
+            [obj.m_Vx,obj.m_Tx] = obj.aabb.get_barycentric_data(m_Dx, false);
+            [obj.p_Vy,obj.p_Ty] = obj.aabb.get_barycentric_data(p_Dy, false);
+            [obj.m_Vy,obj.m_Ty] = obj.aabb.get_barycentric_data(m_Dy, false);
+
+            % Small value for derivatives
+            obj.delta = 2*delta;    
         end
 
         function plot(obj, fig_title) 
@@ -193,6 +233,17 @@ classdef SphericalWarp
             % clean up antipodal points 
             idx = (vecnorm(orig_pt + new_pt) < 1e-4);
             new_vec(:, idx) = tan_vec(:, idx);
+        end
+    end
+
+    methods(Access = protected)
+        function cpObj = copyElement(obj)
+            cpObj = copyElement@matlab.mixin.Copyable(obj);
+
+            grid.V = obj.aabb.V;
+            grid.T = obj.aabb.T;
+
+            cpObj.aabb = AABBtree(grid);
         end
     end
 end

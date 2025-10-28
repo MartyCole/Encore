@@ -269,9 +269,9 @@ end
 figID = figID + 1;
 
 hb = 0.007;
-for i = 1:N
+%for i = 1:N
 f = figure(figID);
-render_sample = i;
+render_sample = 53;
 subplot(1,4,1)
 plot(1:T, orig_warps(render_sample, :), 'r.', 'linewidth', 1) 
 hold on
@@ -319,4 +319,14 @@ title('Original connectivity')
 
 f.Position = [50 500 1500 500];
 sgtitle(sprintf('Warping connectivity for sample %i', render_sample))
+%end
+
+%%
+
+errors = zeros(80,1);
+baseline = zeros(80,1);
+
+for i = 1:N
+    errors(i) = norm(orig_warps(i,:) - interp1(fnl_warp(:,i),linspace(0,1,T),linspace(0,1,T)),2);
+    baseline(i) = norm(orig_warps(i,:) - linspace(0,1,T));
 end

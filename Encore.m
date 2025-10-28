@@ -36,36 +36,42 @@ classdef Encore
             obj.threshold = threshold;            
         end
 
-	function template = get_template(obj, Fs, iters)
-            N_subs = size(Fs,3);
-            
+        function template = get_template(~, Fs, kernel, iters)
+            N_subs = size(Fs,1);
+                        
             % find the mean Q function            
             for i = 1:N_subs
-                Fs(:,:,i) = sqrt(Fs(:,:,i) ./ sum(Fs(:,:,i) .* obj.A, 'all'));  
+                tmp = sqrt(Fs{i}.evaluate(kernel,true));                
+
+                if i == 1
+                    Q_bar = tmp;
+                else
+                    Q_bar = Q_bar + tmp;
+                end
                 disp(i)
             end
             
-            Q_bar = mean(Fs,3);
+            Q_bar = Q_bar ./ N_subs;
             Q_norm = zeros(1,N_subs);
             
             % find the Q function nearest to the mean
             for i = 1:N_subs
-                Q_norm(i) = sum((Fs(:,:,i) - Q_bar).^2 .* obj.A, 'all');
+                Q_norm(i) = sum((sqrt(Fs{i}.evaluate(kernel,true)) - Q_bar).^2, 'all');
                 disp(i)
             end
             
-            idx = find(Q_norm == min(Q_norm));
-            Q_mu = Fs(:,:,idx);
+            idx = find(Q_norm == min(Q_norm),1);
+            Q_mu = sqrt(Fs{idx}.evaluate(kernel,true));
             
             % iterate closer the the karcher median
             for iter = 1:iters
-                vv = zeros(size(Fs));
+                vv = zeros(size(Q_mu,1),size(Q_mu,1),size(Fs,1));
                 distance = zeros(N_subs,1);
                     
                 for i = 1:N_subs
-                    tmpQ = Fs(:,:,i);
+                    tmpQ = sqrt(Fs{i}.evaluate(kernel,true));
                     
-                    tmpTheta = sum(tmpQ(:) .* Q_mu(:) .* obj.A(:));
+                    tmpTheta = sum(tmpQ(:) .* Q_mu(:));
                     
                     if 1 - abs(tmpTheta) < 1e-14
                         tmpTheta = sign(tmpTheta);
@@ -79,9 +85,9 @@ classdef Encore
                 end
                 
                 v_bar = sum(vv,3) / sum(1./distance(distance > 0));
-                tmp = sqrt(sum(v_bar(:) .* v_bar(:) .* obj.A(:)));
+                tmp = sqrt(sum(v_bar(:) .* v_bar(:)));
                 Q_mu = (cos(0.2*tmp) * Q_mu) + (sin(0.2*tmp) * (v_bar / tmp));
-                Q_mu = Q_mu / sqrt(sum(Q_mu(:) .* Q_mu(:) .* obj.A(:)));
+                Q_mu = Q_mu / sqrt(sum(Q_mu(:) .* Q_mu(:)));
 
                 fprintf('Template norm: %0.4f\n', tmp);
 
@@ -114,89 +120,85 @@ classdef Encore
             end
             
             Q2 = sqrt(F2.evaluate(kernel, true));
-            
-            % initial cost
-            moving_img = Q2;
-            FmM = (Q1 - moving_img);
-
-            cost = zeros(obj.max_iters+1,1);
-            cost(1) = sum(FmM(:).^2 .* obj.A(:));            
-
-            P = length(lh_warp.V);
-            P2 = length(lh_warp.V) + length(rh_warp.V);
-
-            last_lh_warp = lh_warp;
-            last_rh_warp = rh_warp;
-            
-            fprintf('Initial cost for Sub: %0.6f\n', cost(1))
+           
+            P = length(obj.lh_grid.V);
+            P2 = length(obj.lh_grid.V) + length(obj.lh_grid.V);
 
             idx_a = 1:P;
             idx_b = (P+1):P2;
+            
+            lh_vt = 0;            
+            rh_vt = 0;      
+
+            % initial cost
+            FmM = (Q1 - Q2);
+            cost = zeros(obj.max_iters+1,1);
+            cost(1) = sum(FmM(:).^2);            
+
+            fprintf('Initial cost for Sub: %0.6f\n', cost(1))
 
             % start registering
             for iter = 1:obj.max_iters  
                 % calculate the derivative
-                [dQ2e1, dQ2e2] = obj.interpolator.get_derivative(moving_img);
-            
-                % evaluate derivative of the cost function
-                FmM = FmM .* obj.A;
+                [dQ2e1, dQ2e2] = obj.interpolator.get_derivative(Q2);            
             
                 % ------------------------------------------------
                 % compute the gradient for the LH warp
-                a = 2 * sum(FmM(idx_a,idx_a) .* dQ2e1(idx_a,idx_a),2) + ...
-                           sum(FmM(idx_a,idx_b) .* dQ2e1(idx_a,idx_b),2);
+                % ------------------------------------------------
+                a = 2*sum(FmM(idx_a,[idx_a,idx_b]) .* dQ2e1(idx_a,[idx_a,idx_b]),2) .* obj.lh_grid.basis(:,:,1);               
+                b = 2*sum(FmM(idx_a,[idx_a,idx_b]) .* dQ2e2(idx_a,[idx_a,idx_b]),2) .* obj.lh_grid.basis(:,:,2);
+                c = sum(FmM(idx_a,[idx_a,idx_b]) .* Q2(idx_a,[idx_a,idx_b]),2) .* obj.lh_grid.laplacian;
+               
+                lh_dH = 2 * sum(a+b+c,1);  
+                lh_dH = squeeze(sum(lh_dH .* obj.lh_grid.basis,2));               
+                
+                % calculate displacement in each basis direction (using
+                % momentum gradient descent to avoid local minimums)
 
-                b = 2 * sum(FmM(idx_a,idx_a) .* dQ2e2(idx_a,idx_a),2) + ...
-                           sum(FmM(idx_a,idx_b) .* dQ2e2(idx_a,idx_b),2);
-
-                c = sum(FmM(idx_a,:) .* moving_img(idx_a,:),2);
-
-                lh_dH = -2 * (sum(a.*obj.lh_grid.basis(:,:,1)) + ...
-                              sum(b.*obj.lh_grid.basis(:,:,2)) + ...
-                              sum(c.*obj.lh_grid.laplacian));
-            
-                % calculate displacement in each basis direction
-                lh_step_size = obj.delta / (norm(lh_dH) + 1e-15);
-                lh_gamma = squeeze(sum(lh_dH .* obj.lh_grid.basis,2)); 
+                % TODO: CONSIDER CONSTRAINING MAX STEP SIZE TO KEEP
+                % DIFFEOMORPHISMS SMOOTH (NO TRIANGLE FOLDS)
+                lh_vt = 0.9*lh_vt + 0.1*lh_dH;                
+                lh_step_size = -obj.delta .* lh_vt;                
                 
                 % ------------------------------------------------
-                a = 2 * sum(FmM(idx_b,idx_b) .* dQ2e1(idx_b,idx_b),2) + ...
-                           sum(FmM(idx_b,idx_a) .* dQ2e1(idx_b,idx_a),2);
+                % compute the gradient for the RH warp
+                % ------------------------------------------------
+                a = 2*sum(FmM(idx_b,[idx_b,idx_a]) .* dQ2e1(idx_b,[idx_b,idx_a]),2) .* obj.rh_grid.basis(:,:,1);               
+                b = 2*sum(FmM(idx_b,[idx_b,idx_a]) .* dQ2e2(idx_b,[idx_b,idx_a]),2) .* obj.rh_grid.basis(:,:,2);
+                c = sum(FmM(idx_b,[idx_b,idx_a]) .* Q2(idx_b,[idx_b,idx_a]),2) .* obj.rh_grid.laplacian;
+               
+                rh_dH = 2 * sum(a+b+c,1);  
+                rh_dH = squeeze(sum(rh_dH .* obj.rh_grid.basis,2));                
 
-                b = 2 * sum(FmM(idx_b,idx_b) .* dQ2e2(idx_b,idx_b),2) + ...
-                           sum(FmM(idx_b,idx_a) .* dQ2e2(idx_b,idx_a),2);
+                % calculate displacement in each basis direction (using
+                % momentum gradient descent to avoid local minimums)
 
-                c = sum(FmM(idx_b,:) .* moving_img(idx_b,:),2);
-
-                rh_dH = -2 * (sum(a.*obj.rh_grid.basis(:,:,1)) + ...
-                              sum(b.*obj.rh_grid.basis(:,:,2)) + ...
-                              sum(c.*obj.rh_grid.laplacian));           
-            
-                % calculate displacement in each basis direction
-                rh_step_size = obj.delta / (norm(rh_dH) + 1e-15);
-                rh_gamma = squeeze(sum(rh_dH .* obj.rh_grid.basis,2));                 
+                % TODO: CONSIDER CONSTRAINING MAX STEP SIZE TO KEEP
+                % DIFFEOMORPHISMS SMOOTH (NO TRIANGLE FOLDS)
+                rh_vt = 0.9*rh_vt + 0.1*rh_dH;                
+                rh_step_size = -obj.delta .* rh_vt;                
 
                 % ------------------------------------------------   
                 % compose the new warps with all previous warps                
-                lh_warp = lh_warp.compose_warp(lh_step_size .* lh_gamma);                 
-                rh_warp = rh_warp.compose_warp(rh_step_size .* rh_gamma);
+                % ------------------------------------------------   
+                lh_warp.compose_warp(lh_step_size);                 
+                rh_warp.compose_warp(rh_step_size);
                 
                 F2.warp_connectome(lh_warp, rh_warp);                
-                moving_img = sqrt(F2.evaluate(kernel, true));
+                Q2 = sqrt(F2.evaluate(kernel, true));
                 
                 % evaluate the new cost
-                FmM = Q1 - moving_img; 
-                cost(iter+1) = sum(FmM(:).^2 .* obj.A(:));
+                FmM = (Q1 - Q2); 
+                cost(iter+1) = sum(FmM(:).^2);
                 
-                if ((cost(iter) - cost(iter+1)) < obj.threshold)       
-                   lh_warp = last_lh_warp;
-                   rh_warp = last_rh_warp;
+                % TODO: CONSIDER LITTLE CHANGE IN COST FUNCTION OVER
+                % MULTIPLE ITERATIONS TO BE THE CUTOFF TO ALLOW FOR
+                % MOMENTUM OVERRUN BUT STILL HAVE A RELATIVLY LARGE
+                % THRESHOLD (i.e. 1e-3 instead of 1e-5)
+                if (abs(cost(iter) - cost(iter+1)) < obj.threshold)       
                    fprintf('Converged (increased cost) %d: %0.6f -> %0.6f\n', iter, cost(1), cost(iter))            
                    break
-                end
-            
-                last_lh_warp = lh_warp;
-                last_rh_warp = rh_warp;                           
+                end                                  
             
                 % show progress if asked
                 if (params.verbose > 0)

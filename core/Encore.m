@@ -85,12 +85,12 @@ classdef Encore
             
             % find the Q function nearest to the mean
             for i = 1:N_subs
-                Q_norm(i) = sum((sqrt(Fs{i}.evaluate(kernel,true)) - Q_bar).^2, 'all');
+                Q_norm(i) = sum((sqrt(Fs{i}.evaluate(kernel)) - Q_bar).^2, 'all');
                 disp(i)
             end
             
             idx = find(Q_norm == min(Q_norm),1);
-            Q_mu = sqrt(Fs{idx}.evaluate(kernel,true));
+            Q_mu = sqrt(Fs{idx}.evaluate(kernel));
             
             % iterate closer the the karcher median
             for iter = 1:iters
@@ -98,7 +98,7 @@ classdef Encore
                 distance = zeros(N_subs,1);
                     
                 for i = 1:N_subs
-                    tmpQ = sqrt(Fs{i}.evaluate(kernel,true));
+                    tmpQ = sqrt(Fs{i}.evaluate(kernel));
                     
                     tmpTheta = sum(tmpQ(:) .* Q_mu(:));
                     
@@ -175,7 +175,7 @@ classdef Encore
 
             % initial FIXED function     
             if isa(F1,"Concon")
-                Q1 = sqrt(F1.evaluate(kernel, kernel_diff));                
+                Q1 = sqrt(F1.evaluate(kernel));                
             else                
                 Q1 = F1;
             end
@@ -188,7 +188,7 @@ classdef Encore
             FmM = (Q1 - Q2);
             cost = zeros(obj.max_iters+1,1);   
 
-            cost(1) = sum(obj.A .* FmM.^2,'all');
+            cost(1) = sum(FmM.^2,'all');
 
             fprintf("-------------------------------------------\n");
             fprintf("Performing non-linear registration:\n");
@@ -216,7 +216,7 @@ classdef Encore
                 
                 % cost update
                 FmM = (Q1 - Q2); 
-                cost(iter+1) = sum(obj.A .* FmM.^2,'all');             
+                cost(iter+1) = sum(FmM.^2,'all');             
                 
                 % check ending condition
                 if ((cost(iter) - cost(iter+1)) < obj.threshold)       
@@ -259,12 +259,19 @@ classdef Encore
             %   lh_warp, rh_warp : SphericalWarp objects containing the best rigid
             %                      rotation for each hemisphere.
 
-            Q1 = sqrt(F1.evaluate(kernel));
+            % initial FIXED function     
+            if isa(F1,"Concon")
+                Q1 = sqrt(F1.evaluate(kernel));                
+            else                
+                Q1 = F1;
+            end
+
+            %Q1 = sqrt(F1.evaluate(kernel));
             Q2 = sqrt(F2.evaluate(kernel));
 
             fprintf("-------------------------------------------\n");
             fprintf("Performing rigid registration:\n");
-            fprintf("Initial Cost: %0.6f\n", sum(obj.A.*(Q1-Q2).^2, 'all'));   
+            fprintf("Initial Cost: %0.6f\n", sum((Q1-Q2).^2, 'all'));   
             fprintf("-------------------------------------------\n");
 
             % load orthogonal rotations in SO(3)
@@ -303,8 +310,8 @@ classdef Encore
                 rh_Q2 = Q2_rot(rh_idx, rh_idx);
                             
                 for i = 1:60                    
-                    lh_costs(i,s) = sum(obj.A(lh_idx,lh_idx).*(lh_Q1 - lh_Q2(lh_perm(:,i),lh_perm(:,i))).^2,'all');
-                    rh_costs(i,s) = sum(obj.A(rh_idx,rh_idx).*(rh_Q1 - rh_Q2(rh_perm(:,i),rh_perm(:,i))).^2,'all');
+                    lh_costs(i,s) = sum((lh_Q1 - lh_Q2(lh_perm(:,i),lh_perm(:,i))).^2,'all');
+                    rh_costs(i,s) = sum((rh_Q1 - rh_Q2(rh_perm(:,i),rh_perm(:,i))).^2,'all');
                 end
 
                 % print progress
@@ -336,8 +343,8 @@ classdef Encore
                         % interpolate rotations in the shell composed with the candidate intital rotation
                         Q2_rot = F2.rotate_matrix_barycentric(Q2, lh_candidate{k} * R{s}, rh_candidate{k} * R{s});
             
-                        lh_costs(k,s) = sum(obj.A(lh_idx,lh_idx).*(lh_Q1 - Q2_rot(lh_idx, lh_idx)).^2, 'all');
-                        rh_costs(k,s) = sum(obj.A(rh_idx,rh_idx).*(rh_Q1 - Q2_rot(rh_idx, rh_idx)).^2, 'all');
+                        lh_costs(k,s) = sum((lh_Q1 - Q2_rot(lh_idx, lh_idx)).^2, 'all');
+                        rh_costs(k,s) = sum((rh_Q1 - Q2_rot(rh_idx, rh_idx)).^2, 'all');
                      
                         % print progress
                         if mod(s,prev_K) == 0
@@ -425,7 +432,7 @@ classdef Encore
             end
         end
 
-        function dH = compute_gradient(obj, FmM, M, M_e1, M_e2, idx, hemi_idx, grid) 
+        function dH = compute_gradient(~, FmM, M, M_e1, M_e2, idx, hemi_idx, grid) 
             % Compute gradient of the registration cost with respect to the warp.
             %
             % Inputs:
@@ -440,7 +447,7 @@ classdef Encore
             %   dH       : gradient vector field on the sphere
 
             % extract the relevant hemisphere block
-            FmM_loc  = FmM(idx, hemi_idx) .* obj.A(idx, hemi_idx);
+            FmM_loc  = FmM(idx, hemi_idx);
             
             % precompute the scalar contractions for each vertex            
             S1 = sum(FmM_loc .* M_e1(idx, hemi_idx), 2); 

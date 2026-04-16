@@ -8,6 +8,12 @@
 %   R2022b
 %
 
+restoredefaultpath
+addpath(genpath('../../'))
+
+clear all
+close all
+
 %% Setup
 
 rng(23711228);                         % set seed for reproduciblity
@@ -31,8 +37,8 @@ lh_warp = random_diffeomorphism(grid,8,0.75,8000);
 rh_warp = random_diffeomorphism(grid,8,0.75,8000);
 
 % generate a random rotation
-[lh_rotation,~] = qr(randn(3));
-[rh_rotation,~] = qr(randn(3));
+lh_rotation = random_rotation(3);
+rh_rotation = random_rotation(3);
 
 lh_warp_and_rot = lh_warp.copy();
 rh_warp_and_rot = lh_warp.copy();
@@ -44,7 +50,7 @@ rh_warp_and_rot.V = rh_warp.V * rh_rotation;
 
 hemi1 = randsample([0 1], size(orig_ep,2), true);
 hemi2 = randsample([0 1], size(orig_ep,2), true);
-hemi2(1:(0.8*size(orig_ep,2))) = hemi1(1:(0.8*size(orig_ep,2)));
+hemi2(1:floor(0.8*size(orig_ep,2))) = hemi1(1:floor(0.8*size(orig_ep,2)));
 
 F1 = Concon(grid,grid,orig_sp.',orig_ep.',hemi1,hemi2);
 F2 = copy(F1);

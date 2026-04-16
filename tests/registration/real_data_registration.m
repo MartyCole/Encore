@@ -27,25 +27,25 @@ grid = SphericalGrid(ico_mesh, l);     % generate a grid object from the mesh
 %% Simulate connectivity on the icosphere
 
 % load real data example (endpoints on a sphere)
-tmp = load("../data/100206_native_coords.mat");
+tmp = load("../data/100206_native_sphere_intersections.mat");
 
-F1_hemi_in = tmp.surf_in;
-F1_hemi_out = tmp.surf_out;
+F1_hemi_in = double(tmp.surf_in);
+F1_hemi_out = double(tmp.surf_out);
 
-F1_start_pts = tmp.vtx_in;
-F1_end_pts = tmp.vtx_out;
+F1_start_pts = double(tmp.vtx_in);
+F1_end_pts = double(tmp.vtx_out);
 
 % the concon class object representing connectomes
 F1 = Concon(grid,grid,F1_start_pts,F1_end_pts,F1_hemi_in,F1_hemi_out);
 
 % load real data example (endpoints on a sphere)
-tmp = load("../data/106824_native_coords.mat");
+tmp = load("../data/106824_native_sphere_intersections.mat");
 
-F2_hemi_in = tmp.surf_in;
-F2_hemi_out = tmp.surf_out;
+F2_hemi_in = double(tmp.surf_in);
+F2_hemi_out = double(tmp.surf_out);
 
-F2_start_pts = tmp.vtx_in;
-F2_end_pts = tmp.vtx_out;
+F2_start_pts = double(tmp.vtx_in);
+F2_end_pts = double(tmp.vtx_out);
 
 % the concon class object representing connectomes
 F2 = Concon(grid,grid,F2_start_pts,F2_end_pts,F2_hemi_in,F2_hemi_out);
@@ -63,7 +63,7 @@ ylabel('ISE')
 xlabel('Sigma')
 title(sprintf("Optimal Sigma: %0.4f",sigma))
 
-[K, dK] = kernel_builder.compute_sigma(sigma);
+[K, dK] = kernel_builder.compute_sigma(0.005);
 
 %% Registration test 
 

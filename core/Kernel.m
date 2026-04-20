@@ -42,7 +42,7 @@ classdef (Abstract) Kernel < handle
     end
 
     methods
-        function [sigma_opt, ISE] = cross_validate_sigma(obj, concon, sigmas)
+        function [sigma_opt, LL] = cross_validate_sigma(obj, concon, sigmas)
             % Perform cross‑validation to estimate the optimal kernel bandwidth sigma.
             %
             % Inputs:
@@ -51,29 +51,39 @@ classdef (Abstract) Kernel < handle
             %
             % Outputs:
             %   sigma_opt : sigma value minimizing the integrated squared error (ISE)
-            %   ISE       : ISE values for each candidate sigma       
+            %   LL        : Leave one out Log Liklihood values for each candidate sigma       
 
-            ISE = zeros(size(sigmas));
+            LL = zeros(size(sigmas));
 
+            % because lots of small multiplications, quicker in CPU
             A = gather(concon.get_adjacency());
 
             fprintf("-------------------------------------------\n");
             fprintf("Performing bandwidth estimation:\n");           
             fprintf("-------------------------------------------\n");
 
+            S = numel(sigmas);
+
+            % for printing the progress
+            thr = (S > 20) * round(S / 20) + (S <= 20); 
+       
             for i = 1:numel(sigmas)
                 sigma = sigmas(i);
 
+                % because lots of small multiplications, quicker in CPU
                 K = gather(obj.compute_sigma(sigma));
 
-                ISE(i) = obj.compute_ISE(K, A, concon);
+                % calculate the LL for the current sigma
+                LL(i) = obj.compute_LOO(K, A, concon);
 
-                if mod(i,(numel(sigmas)/20)) == 0
+                % print progress
+                if mod(i/S,thr) == 0
                     fprintf("=")
                 end
             end
 
-            [~, idx] = min(ISE);
+            % return the sigma with maximum logliklihood
+            [~, idx] = max(LL);
             sigma_opt = sigmas(idx);
             
             fprintf("\nOptimal sigma = %f\n", sigma_opt)           
@@ -81,8 +91,8 @@ classdef (Abstract) Kernel < handle
     end
 
     methods (Access = protected)
-        function ISE_val = compute_ISE(~, K, A, concon, chunk_size)
-            % Compute the Integrated Squared Error (ISE) for a given kernel K.
+        function LOO_val = compute_LOO(~, K, A, concon)
+            % Compute the Leave-one-out Log-Liklihood for a given kernel K.
             %
             % Inputs:
             %   K          : kernel matrix
@@ -91,46 +101,37 @@ classdef (Abstract) Kernel < handle
             %   chunk_size : optional batch size for memory‑efficient processing
             %
             % Output:
-            %   ISE_val : mean ISE across all fibers
+            %   LOO_val    : mean LOO-LL value across fibers
             
-            if nargin < 5
-                chunk_size = 5000;
-            end
-
+            % number of fibers
             M = size(concon.st_points,1);
 
+            % full estimated connectome
             C = max(K.' * A * K, 0);
-           
-            vals = zeros(M,1);
-
+          
+            % save local for speed
             W_sp = concon.st_points;
             I_sp = concon.st_idx;
             W_ep = concon.en_points;
             I_ep = concon.en_idx;
 
-            % process pairs in chunks
-            for s0 = 1:chunk_size:M
-                s1  = min(s0 + chunk_size - 1, M);
-                idx = s0:s1;
-                B   = numel(idx);
-             
-                for b = 1:B
-                    s = idx(b);
+            % somewhere to put the results
+            vals = zeros(M,1);
 
-                    t_sp = I_sp(s,:); 
-                    t_ep = I_ep(s,:);   
+            for s = 1:M
+                % fiber coordinates and indices
+                t_sp = I_sp(s,:); t_ep = I_ep(s,:);   
+                w_sp = W_sp(s,:); w_ep = W_ep(s,:);   
+              
+                % the fiber's contribution to the kernel
+                K_local = (K(t_sp, t_sp) * K(t_ep, t_ep).') / (M - 1);
 
-                    w_sp = W_sp(s,:);   
-                    w_ep = W_ep(s,:);   
-
-                    full_block = C(t_sp, t_ep);                    
-                    self_block = (K(t_sp,t_sp)' * ((w_sp'*w_ep)/(2*M)) * K(t_ep,t_ep));                                                  
-           
-                    vals(s) = (w_sp * full_block.^2 * w_ep.').^2 - 2*(w_sp * (full_block - self_block) * w_ep.');  
-                end
+                % subtract the fiber from the kernel and interpolate
+                vals(s) = max(w_sp * (C(t_sp,t_ep) - K_local) * w_ep.', eps);
             end
-
-            ISE_val = mean(vals);
+ 
+            % final leave-one-out log liklihood
+            LOO_val = mean(log(vals));
         end
 
         function K = maybe_GPU(obj, K)

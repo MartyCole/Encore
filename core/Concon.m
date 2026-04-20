@@ -19,29 +19,29 @@ classdef Concon < matlab.mixin.Copyable
     properties (Access = private)        
         orig_st_points % Original (unwarped) barycentric data
         orig_en_points % Original (unwarped) barycentric data
-        orig_st_idx % Original (unwarped) barycentric data
-        orig_en_idx % Original (unwarped) barycentric data        
+        orig_st_idx    % Original (unwarped) barycentric data
+        orig_en_idx    % Original (unwarped) barycentric data        
 
-        lh_P % Number of vertices in LH/RH meshes (lh_P + rh_P = P)
-        rh_P % Number of vertices in LH/RH meshes (lh_P + rh_P = P)
-        N % Number of fibers
+        lh_P           % Number of vertices in LH/RH meshes (lh_P + rh_P = P)
+        rh_P           % Number of vertices in LH/RH meshes (lh_P + rh_P = P)
+        N              % Number of fibers
 
-        lh_grid % Left hemisphere spherical mesh
-        rh_grid % Right hemisphere spherical mesh
+        lh_grid        % Left hemisphere spherical mesh
+        rh_grid        % Right hemisphere spherical mesh
     end
     properties (SetAccess = private)        
-        st_points % Nx3 barycentric coordinates of fiber start points
-        en_points % Nx3 barycentric coordinates of fiber end points
-        st_hemi %  Nx1 hemisphere indicator for start points (0=LH, 1=RH)
-        en_hemi % Nx1 hemisphere indicator for end points (0=LH, 1=RH)
-        st_idx % Nx3 triangle vertex indices for start points
-        en_idx % Nx3 triangle vertex indices for end points
+        st_points      % Nx3 barycentric coordinates of fiber start points
+        en_points      % Nx3 barycentric coordinates of fiber end points
+        st_hemi        % Nx1 hemisphere indicator for start points (0=LH, 1=RH)
+        en_hemi        % Nx1 hemisphere indicator for end points (0=LH, 1=RH)
+        st_idx         % Nx3 triangle vertex indices for start points
+        en_idx         % Nx3 triangle vertex indices for end points
 
-        A % PxP matrix of triangle areas used for integration
+        A              % PxP matrix of triangle areas used for integration
     end
     properties (Access = private, NonCopyable)
-        lh_aabb % AABB tree for fast LH point‑location queries
-        rh_aabb % AABB tree for fast RH point‑location queries
+        lh_aabb        % AABB tree for fast LH point‑location queries
+        rh_aabb        % AABB tree for fast RH point‑location queries
     end
     methods
         function obj = Concon(lh_grid, rh_grid, st_points, en_points, st_hemi, en_hemi, gpu)     
@@ -60,6 +60,15 @@ classdef Concon < matlab.mixin.Copyable
             % initialise this Concon object using the given grid and endpoints
             obj.initialize(lh_grid, rh_grid, st_points, en_points, st_hemi, en_hemi, gpu);
         end
+
+        function obj = reset(obj)
+            % Reset endpoints to last applied warp
+
+            obj.st_points = obj.orig_st_points;
+            obj.en_points = obj.orig_en_points;
+            obj.st_idx = obj.orig_st_idx;
+            obj.en_idx = obj.orig_en_idx;
+        end        
 
         function [connectome, De1, De2] = evaluate(obj, kernel, d_kernel)  
             % Evaluate the smooth connectome using a kernel defined on the sphere.
@@ -136,7 +145,7 @@ classdef Concon < matlab.mixin.Copyable
 
             % calculate the new barycentric coordinates in relation to the original grid
             obj.get_coordinate_data(warped_st_points, warped_en_points)
-        end
+        end        
 
         function apply_warp(obj, new_lh_grid, new_rh_grid)
             % Apply a warp to the current mesh or reinitialize on a new mesh.
@@ -185,21 +194,17 @@ classdef Concon < matlab.mixin.Copyable
             [bc_lh, tri_lh] = obj.lh_aabb.get_barycentric_data(V_lh_rot, false);
             [bc_rh, tri_rh] = obj.rh_aabb.get_barycentric_data(V_rh_rot, false);
         
-            % sizes
-            P_lh = int64(size(obj.lh_grid.V,1));
-            P_rh = int64(size(obj.rh_grid.V,1));
-        
             % left hemisphere
-            rows_lh = repmat((1:P_lh).', 3,1);      
+            rows_lh = repmat((1:obj.lh_P).', 3,1);      
             cols_lh = tri_lh(:);                  
             vals_lh = bc_lh(:);                    
-            W_lh = sparse(rows_lh, cols_lh, vals_lh, P_lh, P_lh);
+            W_lh = sparse(rows_lh, cols_lh, vals_lh, obj.lh_P, obj.lh_P);
         
             % right hemisphere
-            rows_rh = repmat((1:P_rh).', 3,1);
+            rows_rh = repmat((1:obj.rh_P).', 3,1);
             cols_rh = tri_rh(:);
             vals_rh = bc_rh(:);
-            W_rh = sparse(rows_rh, cols_rh, vals_rh, P_rh, P_rh);        
+            W_rh = sparse(rows_rh, cols_rh, vals_rh, obj.rh_P, obj.rh_P);        
          
             % block-diagonal interpolation
             W = obj.maybe_GPU((blkdiag(W_lh, W_rh)));
@@ -234,8 +239,8 @@ classdef Concon < matlab.mixin.Copyable
             obj.rh_grid = rh_grid;
 
             % the size of the grids
-            obj.lh_P = length(lh_grid.V); 
-            obj.rh_P = length(rh_grid.V);
+            obj.lh_P = int64(length(lh_grid.V)); 
+            obj.rh_P = int64(length(rh_grid.V));
 
             % area of triangles for use in integration
             obj.A = [lh_grid.A; rh_grid.A] * [lh_grid.A; rh_grid.A].';

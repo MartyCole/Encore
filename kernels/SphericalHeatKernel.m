@@ -80,13 +80,13 @@ classdef SphericalHeatKernel < Kernel
             cutoff_dst = obj.compute_cutoff(sigma);
 
             % compute the kernel
-            lh_K = obj.calc_cross_harmonics(obj.lh_P, sigma, cutoff_dst, obj.lh_X);% / (4*pi);
-            rh_K = obj.calc_cross_harmonics(obj.rh_P, sigma, cutoff_dst, obj.rh_X);% / (4*pi);
+            lh_K = obj.calc_cross_harmonics(obj.lh_P, sigma, cutoff_dst, obj.lh_X);
+            rh_K = obj.calc_cross_harmonics(obj.rh_P, sigma, cutoff_dst, obj.rh_X);
 
             K = blkdiag(lh_K, rh_K);
 
-            % DEPRICATED: row normalise the kernel (diffusion smoothing)
-            K_norm = sum(K,2);%obj.safe_rowsum(K);            
+            % row normalise the kernel (diffusion smoothing)
+            K_norm = sum(K,2);   
             K = K ./ K_norm;
 
             % move to the GPU?
@@ -99,9 +99,9 @@ classdef SphericalHeatKernel < Kernel
                 rh_dKp = obj.calc_cross_harmonics(obj.rh_dP, sigma, cutoff_dst, obj.rh_X);
 
                 % build the derivative in x,y,z directions
-                dK.x = obj.build_derivative(lh_dKp.', rh_dKp, obj.lh_grid.V(:,1).', obj.rh_grid.V(:,1).',K,K_norm);
-                dK.y = obj.build_derivative(lh_dKp.', rh_dKp, obj.lh_grid.V(:,2).', obj.rh_grid.V(:,2).',K,K_norm);
-                dK.z = obj.build_derivative(lh_dKp.', rh_dKp, obj.lh_grid.V(:,3).', obj.rh_grid.V(:,3).',K,K_norm);
+                dK.x = obj.build_derivative(lh_dKp.', rh_dKp, obj.lh_grid.V(:,1).', obj.rh_grid.V(:,1).', K, K_norm);
+                dK.y = obj.build_derivative(lh_dKp.', rh_dKp, obj.lh_grid.V(:,2).', obj.rh_grid.V(:,2).', K, K_norm);
+                dK.z = obj.build_derivative(lh_dKp.', rh_dKp, obj.lh_grid.V(:,3).', obj.rh_grid.V(:,3).', K, K_norm);
             end
         end
     end
@@ -158,6 +158,8 @@ classdef SphericalHeatKernel < Kernel
             % Inputs:
             %   lh_dK, rh_dK : derivative of Legendre expansion for LH and RH
             %   lh_p, rh_p   : x, y, or z coordinates of grid vertices
+            %   K            : the Kernel to take the derivative of
+            %   K_norm       : the constant used to normalise K
             %
             % Output:
             %   dK_p : block‑diagonal derivative matrix
@@ -165,10 +167,8 @@ classdef SphericalHeatKernel < Kernel
             % get the directional derivative dK_p
             dK_p = blkdiag(lh_dK .* lh_p, rh_dK .* rh_p);
 
-            % DEPRICATED: propagate the normalisation to the derivative
+            % propagate the normalisation to the derivative
             dK_p = (dK_p - K .* sum(dK_p, 2)) ./ K_norm;
-
-            %dK_p = (dK_p/(4*pi)^2);
 
             % move to the GPU 
             dK_p = obj.maybe_GPU(dK_p);

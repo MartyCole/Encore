@@ -152,13 +152,18 @@ classdef Encore
             parse(p, varargin{:});
             params = p.Results;
 
+            % initial FIXED function     
+            if isa(F1,"Concon")
+                Q1 = sqrt(F1.evaluate(kernel));                
+            else                
+                Q1 = F1;
+            end
+
             % setup warps and variables for the loop
             F2 = copy(F2);
 
-            if params.init_rotation == true
-                [lh_warp, rh_warp] = obj.initial_registration(F1,F2,kernel);
-
-                F2.warp_connectome(lh_warp, rh_warp); 
+            if params.init_rotation == true               
+                [lh_warp, rh_warp] = obj.initial_registration(F1,F2,kernel); 
             else
                 lh_warp = SphericalWarp(obj.lh_grid);
                 rh_warp = SphericalWarp(obj.rh_grid);    
@@ -171,14 +176,7 @@ classdef Encore
             idx_b = (lh_P+1):all_P;
 
             lh_idx = [idx_a,idx_b];
-            rh_idx = [idx_b,idx_a];
-
-            % initial FIXED function     
-            if isa(F1,"Concon")
-                Q1 = sqrt(F1.evaluate(kernel));                
-            else                
-                Q1 = F1;
-            end
+            rh_idx = [idx_b,idx_a];       
             
             % initial MOVING function
             [Q2,Q2_e1,Q2_e2] = F2.evaluate(kernel, kernel_diff);
@@ -265,13 +263,14 @@ classdef Encore
             else                
                 Q1 = F1;
             end
-
-            %Q1 = sqrt(F1.evaluate(kernel));
+           
             Q2 = sqrt(F2.evaluate(kernel));
+
+            initial_cost = sum((Q1-Q2).^2,'all');
 
             fprintf("-------------------------------------------\n");
             fprintf("Performing rigid registration:\n");
-            fprintf("Initial Cost: %0.6f\n", sum((Q1-Q2).^2, 'all'));   
+            fprintf("Initial Cost: %0.6f\n", initial_cost);   
             fprintf("-------------------------------------------\n");
 
             % load orthogonal rotations in SO(3)
@@ -363,7 +362,23 @@ classdef Encore
             rh_warp = SphericalWarp(obj.rh_grid);   
 
             lh_warp.rotate(lh_candidate{1}');
-            rh_warp.rotate(rh_candidate{1}');            
+            rh_warp.rotate(rh_candidate{1}');    
+
+            F2.warp_connectome(lh_warp, rh_warp); 
+
+            Q2 = sqrt(F2.evaluate(kernel));
+
+            final_cost = sum((Q1-Q2).^2,'all');
+
+            % barycentric interpolation is not completely accurate
+            % if the initial registration does not actually imporve
+            % the cost, reset the inital registration to the identity
+            if final_cost > initial_cost
+                F2.reset();
+
+                lh_warp = SphericalWarp(obj.lh_grid);
+                rh_warp = SphericalWarp(obj.rh_grid);   
+            end
         end
 
         function [lh_new, rh_new] = select_best_candidates(~, lh_costs, rh_costs, K, R_list, varargin)

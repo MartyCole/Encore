@@ -65,7 +65,7 @@ classdef (Abstract) Kernel < handle
             S = numel(sigmas);
 
             % for printing the progress
-            thr = (S > 20) * round(S / 20) + (S <= 20); 
+            thr = max(floor(S / 20), 1); 
        
             for i = 1:numel(sigmas)
                 sigma = sigmas(i);
@@ -77,7 +77,7 @@ classdef (Abstract) Kernel < handle
                 LL(i) = obj.compute_LOO(K, A, concon);
 
                 % print progress
-                if mod(i/S,thr) == 0
+                if mod(i,thr) == 0
                     fprintf("=")
                 end
             end

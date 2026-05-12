@@ -139,19 +139,19 @@ classdef SphericalGrid
                 idx = idx + len;
             end
 
-            % normalize basis fields using area-weighted L2 norm
-            norm_constant = sqrt(sum((basis(:,:,1).^2 + basis(:,:,2).^2) .* obj.A, 1));            
-                 
-            basis(:,:,1) = basis(:,:,1) ./ norm_constant;
-            basis(:,:,2) = basis(:,:,2) ./ norm_constant;     
-            div = div ./ norm_constant;        
-            
             % build the curl basis fields: curl(Y) = [dY/dphi, -dY/dtheta]
             basis(:,(K+1):end,1) = basis(:,1:K,2);
             basis(:,(K+1):end,2) = -basis(:,1:K,1);
 
             % divergence of curl fields is zero
             div(:,(K+1):end) = 0;
+
+            % normalize basis fields using area-weighted L2 norm
+            norm_constant = sqrt(sum((basis(:,:,1).^2 + basis(:,:,2).^2) .* obj.A, 1));            
+                 
+            basis(:,:,1) = basis(:,:,1) ./ norm_constant;
+            basis(:,:,2) = basis(:,:,2) ./ norm_constant;     
+            div = div ./ norm_constant;        
         end
 
         function [dY_theta, dY_phi, lap_Y] = compute_harmonics(obj, L)    

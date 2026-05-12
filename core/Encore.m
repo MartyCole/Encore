@@ -70,7 +70,7 @@ classdef Encore
                         
             % find the mean Q function            
             for i = 1:N_subs
-                tmp = sqrt(Fs{i}.evaluate(kernel));                
+                tmp = Fs{i}.Q_transform(kernel);                                
 
                 if i == 1
                     Q_bar = tmp;
@@ -85,21 +85,23 @@ classdef Encore
             
             % find the Q function nearest to the mean
             for i = 1:N_subs
-                Q_norm(i) = sum((sqrt(Fs{i}.evaluate(kernel)) - Q_bar).^2, 'all');
+                tmp = Fs{i}.Q_transform(kernel);                
+                
+                Q_norm(i) = sum((tmp - Q_bar).^2, 'all');
                 disp(i)
             end
             
             idx = find(Q_norm == min(Q_norm),1);
-            Q_mu = sqrt(Fs{idx}.evaluate(kernel));
-            
+            Q_mu = Fs{idx}.Q_transform(kernel);   
+                      
             % iterate closer the the karcher median
             for iter = 1:iters
                 vv = zeros(size(Q_mu,1),size(Q_mu,1),size(Fs,1));
                 distance = zeros(N_subs,1);
                     
                 for i = 1:N_subs
-                    tmpQ = sqrt(Fs{i}.evaluate(kernel));
-                    
+                    tmpQ = Fs{i}.Q_transform(kernel);     
+
                     tmpTheta = sum(tmpQ(:) .* Q_mu(:));
                     
                     if 1 - abs(tmpTheta) < 1e-14
@@ -112,7 +114,7 @@ classdef Encore
                         vv(:,:,i) = ((distance(i) / sin(distance(i))) * (tmpQ - cos(distance(i))*Q_mu)) / distance(i);
                     end
                 end
-                
+             
                 v_bar = sum(vv,3) / sum(1./distance(distance > 0));
                 tmp = sqrt(sum(v_bar(:) .* v_bar(:)));
                 Q_mu = (cos(0.2*tmp) * Q_mu) + (sin(0.2*tmp) * (v_bar / tmp));
@@ -154,7 +156,7 @@ classdef Encore
 
             % initial FIXED function     
             if isa(F1,"Concon")
-                Q1 = sqrt(F1.evaluate(kernel));                
+                Q1 = F1.Q_transform(kernel);                
             else                
                 Q1 = F1;
             end
@@ -178,9 +180,8 @@ classdef Encore
             lh_idx = [idx_a,idx_b];
             rh_idx = [idx_b,idx_a];       
             
-            % initial MOVING function
-            [Q2,Q2_e1,Q2_e2] = F2.evaluate(kernel, kernel_diff);
-            [Q2,Q2_e1,Q2_e2] = obj.Q_transform(Q2,Q2_e1,Q2_e2);     
+            % initial MOVING function           
+            [Q2,Q2_e1,Q2_e2] = F2.Q_transform(kernel, kernel_diff);     
            
             % initial cost
             FmM = (Q1 - Q2);
@@ -203,14 +204,13 @@ classdef Encore
                 rh_step_size = obj.compute_step_size(rh_dH, obj.delta, 0.2);                
 
                 % update the warps
-                lh_warp.compose_warp(lh_step_size);                 
-                rh_warp.compose_warp(rh_step_size);  
+                lh_warp.compose(lh_step_size);                 
+                rh_warp.compose(rh_step_size);  
 
                 % re-evaluate Q2 and its derivatives
-                F2.warp_connectome(lh_warp, rh_warp);                
-               
-                [Q2,Q2_e1,Q2_e2] = F2.evaluate(kernel, kernel_diff);
-                [Q2,Q2_e1,Q2_e2] = obj.Q_transform(Q2,Q2_e1,Q2_e2);
+                F2.warp_connectome(lh_warp, rh_warp);  
+                      
+                [Q2,Q2_e1,Q2_e2] = F2.Q_transform(kernel, kernel_diff);
                 
                 % cost update
                 FmM = (Q1 - Q2); 
@@ -259,12 +259,12 @@ classdef Encore
 
             % initial FIXED function     
             if isa(F1,"Concon")
-                Q1 = sqrt(F1.evaluate(kernel));                
+                Q1 = F1.Q_transform(kernel);                
             else                
                 Q1 = F1;
             end
            
-            Q2 = sqrt(F2.evaluate(kernel));
+            Q2 = F2.Q_transform(kernel);
 
             initial_cost = sum((Q1-Q2).^2,'all');
 
@@ -366,7 +366,7 @@ classdef Encore
 
             F2.warp_connectome(lh_warp, rh_warp); 
 
-            Q2 = sqrt(F2.evaluate(kernel));
+            Q2 = F2.Q_transform(kernel);
 
             final_cost = sum((Q1-Q2).^2,'all');
 
@@ -462,13 +462,13 @@ classdef Encore
             %   dH       : gradient vector field on the sphere
 
             % extract the relevant hemisphere block
-            FmM_loc  = FmM(idx, hemi_idx);
+            FmM_loc = FmM(idx, hemi_idx);
             
             % precompute the scalar contractions for each vertex            
             S1 = sum(FmM_loc .* M_e1(idx, hemi_idx), 2); 
             S2 = sum(FmM_loc .* M_e2(idx, hemi_idx), 2); 
             S3 = sum(FmM_loc .* M(idx, hemi_idx),    2);
-            
+
             % build the integrand for each vertex
             integrand = 2 * S1 .* grid.basis(:, :, 1) ...
                       + 2 * S2 .* grid.basis(:, :, 2) + S3 .* grid.divergence;
@@ -496,16 +496,6 @@ classdef Encore
             end
         
             step_size = -delta*dH;           
-        end
-
-        function [Q, Q_e1, Q_e2] = Q_transform(~, F, F_e1, F_e2)
-            % Convert F to Q = sqrt(F) and propagate derivatives via chain rule.
-
-            Q = sqrt(F);
-
-            % propegate the square root to the derivative by chain rule
-            Q_e1 = ((1./(2*(max(Q,1e-15)))) .* F_e1);
-            Q_e2 = ((1./(2*(max(Q,1e-15)))) .* F_e2);
         end
 
         function plot_progress(~, fig_id, lh_warp, rh_warp, cost, iter)

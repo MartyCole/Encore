@@ -16,6 +16,6 @@ function [pts] = sphere_exp_map(vertices, gamma)
     idx = norm_vec > eps;
        
     pts = vertices;
-    pts(idx,:) = cos(norm_vec(idx)).*pts(idx,:) + ...
-                 sin(norm_vec(idx)).*((gamma(idx,:)./norm_vec(idx)));
+    pts(idx,:) = cos(norm_vec(idx)) .* vertices(idx,:) + ...
+                 sin(norm_vec(idx)) .* ((gamma(idx,:)./norm_vec(idx)));
 end

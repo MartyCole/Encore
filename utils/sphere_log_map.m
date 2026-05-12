@@ -1,20 +1,20 @@
 % sphere_log_map.m - Apply the spherical logarithm map in cartestian
-% coordinates, from vertices using the tangent vectors gamma
+% coordinates.
 %
-% Syntax:  [pts] = sphere_exp_map(vertices,gamma)
+% Syntax:  [pts] = sphere_log_map(mu,q)
 %
 % Inputs:
-%    vertices - Points from which to apply the exponential map
-%    gamma - Tangent vector field
+%    mu - Points from which to apply the log map
+%    q - Target points to lift from the unit sphere
 %
 % Outputs:
-%    pts - Points on the unit sphere exp_vertices(gamma)
+%    pts - Tangent vectors log_mu(q)
 %
 
 function [gamma] = sphere_log_map(mu, q)
-    tmp_theta = acos(dot(q,mu,2));
-    idx = tmp_theta > eps;                
+    theta = acos(max(-1, min(1, dot(q,mu,2))));
+    idx = theta > eps;                
             
     gamma = zeros(size(mu));
-    gamma(idx,:) = (tmp_theta(idx) ./ sin(tmp_theta(idx))) .* (q(idx,:) - (dot(q(idx,:),mu(idx,:),2) .* mu(idx,:)));   
+    gamma(idx,:) = (theta(idx) ./ sin(theta(idx))) .* (q(idx,:) - (dot(q(idx,:),mu(idx,:),2) .* mu(idx,:)));   
 end

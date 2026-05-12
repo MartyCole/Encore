@@ -73,17 +73,17 @@ classdef GaussianKernel < Kernel
             % compute the directional derivative if requested
             if nargout == 2      
                 % compute the derivative of the kernel with the given sigma
-                lh_dK = (-obj.lh_X/(2*pi*sigma^4)) .* exp(-(obj.lh_X.^2 / (2 * (sigma^2))));
-                rh_dK = (-obj.rh_X/(2*pi*sigma^4)) .* exp(-(obj.rh_X.^2 / (2 * (sigma^2))));
+                lh_dK = (-1/sigma^2) .* lh_K;
+                rh_dK = (-1/sigma^2) .* rh_K;
 
                 % only support within cutoff distance
                 lh_dK(obj.lh_X > cutoff_dst) = 0;
                 rh_dK(obj.rh_X > cutoff_dst) = 0;
 
                 % build the derivative in x,y,z directions
-                dK.x = obj.build_derivative(obj.lh_grid.V(:,1).', obj.rh_grid.V(:,1).', K, lh_dK, rh_dK, K_norm);
-                dK.y = obj.build_derivative(obj.lh_grid.V(:,2).', obj.rh_grid.V(:,2).', K, lh_dK, rh_dK, K_norm);
-                dK.z = obj.build_derivative(obj.lh_grid.V(:,3).', obj.rh_grid.V(:,3).', K, lh_dK, rh_dK, K_norm);
+                dK.x = obj.build_derivative(obj.lh_grid.V(:,1), obj.rh_grid.V(:,1), K, lh_dK, rh_dK, K_norm);
+                dK.y = obj.build_derivative(obj.lh_grid.V(:,2), obj.rh_grid.V(:,2), K, lh_dK, rh_dK, K_norm);
+                dK.z = obj.build_derivative(obj.lh_grid.V(:,3), obj.rh_grid.V(:,3), K, lh_dK, rh_dK, K_norm);
             end
         end
 
@@ -95,7 +95,7 @@ classdef GaussianKernel < Kernel
     methods (Access = private)
         function dK_p = build_derivative(obj, lh_p, rh_p, K, lh_dK, rh_dK, K_norm)            
             % get the directional derivative dK_p
-            dK_p = blkdiag(lh_dK .* lh_p, rh_dK .* rh_p);
+            dK_p = blkdiag(lh_dK .* (lh_p-lh_p.'), rh_dK .* (rh_p-rh_p.'));
 
             % propagate the normalisation to the derivative
             dK_p = (dK_p - K .* sum(dK_p, 2)) ./ K_norm;

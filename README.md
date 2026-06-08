@@ -3,7 +3,7 @@
 Requires libigl for some geometric operation (AABBTree, Voronoi Area, Barycentric Interpolation): https://libigl.github.io/ 
 
 ## Overview
-TODO: Add description
+This repository contains everything needed to register Structural Connectomes based on endpoint information on the cortical surface. The scripts and README in `Encore/tests/registration/` describe the pipeline needed for analysis and replication paper results.
 
 ## Classes
 - SphericalGrid - provides geometry, basis, tangent frames

@@ -27,7 +27,7 @@ grid = SphericalGrid(ico_mesh, l);     % generate a grid object from the mesh
 %% Simulate connectivity on the icosphere
 
 % load real data example (endpoints on a sphere)
-tmp = load("../data/100206_native_sphere_intersections.mat");
+tmp = load("../data/100206_reg_sphere_intersections.mat");
 
 F1_hemi_in = double(tmp.surf_in);
 F1_hemi_out = double(tmp.surf_out);
@@ -39,7 +39,7 @@ F1_end_pts = double(tmp.vtx_out);
 F1 = Concon(grid,grid,F1_start_pts,F1_end_pts,F1_hemi_in,F1_hemi_out);
 
 % load real data example (endpoints on a sphere)
-tmp = load("../data/106824_native_sphere_intersections.mat");
+tmp = load("../data/100610_reg_sphere_intersections.mat");
 
 F2_hemi_in = double(tmp.surf_in);
 F2_hemi_out = double(tmp.surf_out);

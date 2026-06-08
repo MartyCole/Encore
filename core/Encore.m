@@ -102,7 +102,7 @@ classdef Encore
                 for i = 1:N_subs
                     tmpQ = Fs{i}.Q_transform(kernel);     
 
-                    tmpTheta = sum(tmpQ(:) .* Q_mu(:));
+                    tmpTheta = trace(tmpQ * Q_mu);
                     
                     if 1 - abs(tmpTheta) < 1e-14
                         tmpTheta = sign(tmpTheta);

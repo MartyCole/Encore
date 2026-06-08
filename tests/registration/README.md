@@ -54,8 +54,8 @@ Each subject has a corresponding file:
 
 containing:
 
-- `surf_in`, `surf_out` - hemisphere labels  
-- `vtx_in`, `vtx_out` - streamline endpoints on the sphere  
+- `surf_in`, `surf_out` - hemisphere labels (0=left, 1=right)
+- `vtx_in`, `vtx_out` - streamline endpoints on the sphere (cartesian coordinates on a unit spher)
 
 These are used to construct a **structural continuous connectivity object**:
 
@@ -103,7 +103,7 @@ template = encore.get_template(Fs,K,100);
 
 ### The `Encore` Object
 
-`Encore` implements a **diffeomorphic registration algorithm** on the sphere.
+`Encore` implements the **diffeomorphic registration algorithm** on the sphere.
 
 Parameters:
 
@@ -119,7 +119,7 @@ Parameters:
 1. Computing the median connectome (evaluated using kernel `K`)  
 2. Updating the estimate toward the Karcher mean  
 3. Refining the template  
-4. Repeating until convergence  
+4. Repeating steps 2 and 3 until convergence
 
 ## 5. Registering Each Subject
 
@@ -133,6 +133,10 @@ For each subject:
 - Computes a left‑hemisphere warp  
 - Computes a right‑hemisphere warp  
 - Saves both to `example_results/`
+
+By setting the `verbose` keyword to a value greater than 0, the algorithm will plot the progress of the registration with each iteration. For faster registration, remove the keyword or set equal to zero.
+
+![Example Verbose Output](../example_results/example_progress.png)
 
 ### Output Format
 

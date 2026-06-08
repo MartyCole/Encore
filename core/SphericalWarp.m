@@ -221,7 +221,7 @@ classdef SphericalWarp < matlab.mixin.Copyable
             quiver3(obj.V0(:,1),obj.V0(:,2),obj.V0(:,3), ...
                 tangent_vec(:,1), tangent_vec(:,2), tangent_vec(:,3),2,'k','LineWidth',2);
 
-            hold on; axis equal; colormap summer; colorbar;
+            hold on; axis equal; colormap jet; colorbar;
 
             trisurf(obj.T, obj.V0(:,1)*0.99, obj.V0(:,2)*0.99, obj.V0(:,3)*0.99, mag_norm, ...
                 'EdgeAlpha', 0)

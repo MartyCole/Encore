@@ -103,10 +103,11 @@ end
 %% Show resulting warps
 
 figure(2)
-tiledlayout(1,2)
+tiledlayout(1,2,"TileSpacing","tight","Padding","compact")
+
 nexttile
 lh_warp.plot_field("LH Warp")
-pbaspect([1 1 1]); view(0, 0);
+pbaspect([1 1 1]); view(180, 0);
 nexttile
 rh_warp.plot_field("RH Warp")
-pbaspect([1 1 1]); view(0, 0);
+pbaspect([1 1 1]); view(180, 0);

@@ -2,7 +2,7 @@
 ### Using 10 Participants from the HCP Young Adult Dataset
 
 The file `example_analysis.m` implements the workflow described in this document.  
-The script performs a full **population‑level registration** of structural connectomes using spherical representations of streamline endpoints.
+The script performs a full **population‑level registration** of structural connectomes using streamline endpoints on spherical representations of the cortical surface.
 
 The pipeline consists of:
 

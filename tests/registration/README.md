@@ -197,6 +197,8 @@ Lower spherical harmonic order -> smoother but less expressive warps.
 
 # Analyzing Warped Connectomes
 
+![Example SVFs](../example_results/example_warps.png)
+
 After generating warp fields, they can be applied to the `SConcon` objects for analysis.
 
 ## Applying a Warp
